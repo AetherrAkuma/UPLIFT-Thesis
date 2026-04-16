@@ -1,13 +1,35 @@
 from fastapi import FastAPI, BackgroundTasks, HTTPException
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
-from sentence_transformers import SentenceTransformer, util
-import torch
 import sqlite3
 import json
 import uuid
 import sys
 import os
+import re
+import warnings
+import logging
+import numpy as np
+import faiss
+import torch
+
+# ==========================================
+# 0. SUPPRESS ALL HUGGINGFACE WARNINGS
+# ==========================================
+os.environ["HF_HUB_DISABLE_SYMLINKS_WARNING"] = "1"
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
+os.environ["TRANSFORMERS_VERBOSITY"] = "error" 
+warnings.filterwarnings("ignore")
+logging.getLogger("sentence_transformers").setLevel(logging.ERROR)
+
+# The Ultimate Silencer for "layers were not sharded"
+try:
+    import transformers
+    transformers.logging.set_verbosity_error()
+except ImportError:
+    pass
+
+from sentence_transformers import SentenceTransformer
 
 # ==========================================
 # 1. APPLICATION & AI SETUP
@@ -24,18 +46,20 @@ app.add_middleware(
 
 print("[INFO] Initializing UPLIFT AI Semantic Engine...")
 try:
-    # Upgraded L12 model for high semantic accuracy (Chapter 1 Aligned)
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    model = SentenceTransformer('all-MiniLM-L12-v2').to(device)
-    print(f"[INFO] all-MiniLM-L12-v2 loaded successfully on {device}.")
+    CACHE_DIR = "./model_cache"
+    os.makedirs(CACHE_DIR, exist_ok=True)
+    
+    # Load model and cache it locally
+    model = SentenceTransformer('all-MiniLM-L12-v2', cache_folder=CACHE_DIR).to(device)
+    print(f"[INFO] all-MiniLM-L12-v2 loaded successfully on {device} (Cached locally).")
 except Exception as e:
-    print(f"[ERROR] Failed to load Semantic Matching Engine: {e}")
+    print(f"[ERROR] Failed to load Semantic Engine: {e}")
     sys.exit(1)
 
 # ==========================================
-# 2. SQLITE DATABASE SETUP (PROTOTYPE PERSISTENCE)
+# 2. SQLITE DATABASE SETUP
 # ==========================================
-# Simulates the PostgreSQL pgvector environment safely for local presentations
 DB_FILE = "uplift_prototype.db"
 
 def get_db_connection():
@@ -46,7 +70,6 @@ def get_db_connection():
 def init_db():
     conn = get_db_connection()
     cursor = conn.cursor()
-    # Create jobs table. 'embedding' will store the AI vector as a JSON string
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS jobs (
             id TEXT PRIMARY KEY,
@@ -60,9 +83,8 @@ def init_db():
     """)
     conn.commit()
     conn.close()
-    print("[INFO] SQLite Database Initialized.")
 
-init_db() # Run on startup
+init_db() 
 
 # ==========================================
 # 3. PYDANTIC DATA MODELS
@@ -80,61 +102,44 @@ class PWDProfile(BaseModel):
     skills: str 
 
 # ==========================================
-# 4. BACKGROUND TASKS (AI AUTOMATION)
+# 4. BACKGROUND TASKS
 # ==========================================
 def generate_job_embedding(job_id: str, physical_requirements: str):
-    """
-    Simulates the async pgvector pipeline. Processes the 384-d vector 
-    in the background to prevent LGU Admin dashboard lag.
-    """
     try:
-        # Generate the sentence embedding
         embedding_tensor = model.encode(physical_requirements, convert_to_tensor=False)
-        embedding_list = embedding_tensor.tolist() # Convert to standard python list
+        embedding_list = embedding_tensor.tolist() 
         
-        # Update the database
         conn = get_db_connection()
         cursor = conn.cursor()
         cursor.execute(
-            """
-            UPDATE jobs 
-            SET status = 'approved', embedding = ? 
-            WHERE id = ?
-            """, 
+            "UPDATE jobs SET status = 'approved', embedding = ? WHERE id = ?", 
             (json.dumps(embedding_list), job_id)
         )
         conn.commit()
         conn.close()
-        print(f"[INFO] AI Embedding generated and Job {job_id} is now APPROVED.")
     except Exception as e:
         print(f"[ERROR] Background Vectorization Failed for {job_id}: {e}")
 
 # ==========================================
-# 5. CORE SYSTEM ENDPOINTS
+# 5. CORE ENDPOINTS
 # ==========================================
 
 @app.post("/api/employer/submit-job")
 async def employer_submit_job(job: JobSubmission):
-    """Step 1: Employer submits a job (Defaults to Pending)."""
     job_id = str(uuid.uuid4())
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute(
-        """
-        INSERT INTO jobs (id, employer_name, job_title, job_description, physical_requirements, status)
-        VALUES (?, ?, ?, ?, ?, 'pending')
-        """,
+        "INSERT INTO jobs (id, employer_name, job_title, job_description, physical_requirements, status) VALUES (?, ?, ?, ?, ?, 'pending')",
         (job_id, job.employer_name, job.job_title, job.job_description, job.physical_requirements)
     )
     conn.commit()
     conn.close()
-    
-    return {"message": "Job submitted successfully. Pending NCDA Admin verification.", "job_id": job_id}
+    return {"message": "Job submitted successfully.", "job_id": job_id}
 
 
 @app.get("/api/admin/jobs/{status}")
 async def get_jobs_by_status(status: str):
-    """Step 2: Admin views jobs (status = 'pending' or 'approved')."""
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute("SELECT id, employer_name, job_title, physical_requirements, status FROM jobs WHERE status = ?", (status,))
@@ -145,7 +150,6 @@ async def get_jobs_by_status(status: str):
 
 @app.post("/api/admin/approve-job/{job_id}")
 async def admin_approve_job(job_id: str, background_tasks: BackgroundTasks):
-    """Step 3: Admin approves the job, triggering AI vectorization."""
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute("SELECT physical_requirements FROM jobs WHERE id = ? AND status = 'pending'", (job_id,))
@@ -153,24 +157,15 @@ async def admin_approve_job(job_id: str, background_tasks: BackgroundTasks):
     conn.close()
     
     if not row:
-        raise HTTPException(status_code=404, detail="Pending job not found or already approved.")
-    
-    # Trigger background AI task
+        raise HTTPException(status_code=404, detail="Pending job not found.")
     background_tasks.add_task(generate_job_embedding, job_id, row['physical_requirements'])
-    
-    return {"message": "Job verified! AI is currently generating semantic embeddings in the background."}
+    return {"message": "Job verified!"}
 
 
 @app.post("/api/pwd/match")
 async def pwd_suitability_match(profile: PWDProfile):
-    """
-    Step 4: The Core UPLIFT AI Engine.
-    Implements the exact "Hybrid Scoring System" defined in Chapter 1.
-    (70% Semantic Vector Similarity + 30% Keyword Matching)
-    """
     conn = get_db_connection()
     cursor = conn.cursor()
-    # Fetch only approved jobs that have vector embeddings
     cursor.execute("SELECT * FROM jobs WHERE status = 'approved' AND embedding IS NOT NULL")
     approved_jobs = [dict(row) for row in cursor.fetchall()]
     conn.close()
@@ -178,94 +173,147 @@ async def pwd_suitability_match(profile: PWDProfile):
     if not approved_jobs:
         return {"message": "No approved jobs available.", "matches": []}
 
-    # 1. Vectorize the PWD's physical capabilities
-    pwd_vector = model.encode(profile.physical_capabilities, convert_to_tensor=True)
-    pwd_skills_set = set(profile.skills.lower().replace(",", "").split())
-    
+    # --- ADVANCED HEURISTIC HELPERS ---
+    def extract_hours(text):
+        match = re.search(r'(\d+)\s*hour', text.lower())
+        return int(match.group(1)) if match else None
+
+    def extract_required_skills(desc_text):
+        # Extracts specific skills listed after the word "skills:" in job descriptions
+        match = re.search(r'skills?:\s*([a-z0-9,\s]+)', desc_text.lower())
+        if match:
+            raw_skills = re.split(r'[,\s]+', match.group(1))
+            return set([s.strip() for s in raw_skills if len(s) > 2])
+        return set()
+
+    def generate_detailed_insights(semantic_score, user_hours, job_hours, matched_skills, missing_skills, disability_type):
+        insights = []
+        
+        # 1. Environmental & Physical Analytics
+        if semantic_score >= 85:
+            insights.append(f"<b>Environmental Alignment:</b> The AI calculates an excellent {semantic_score:.1f}% physical match. Because you identified as having an {disability_type} disability, this high vector score strongly suggests the employer's facilities pose minimal friction to your specific mobility or sensory needs.")
+        elif semantic_score >= 60:
+            insights.append(f"<b>Favorable Environment:</b> At a {semantic_score:.1f}% match, this job is generally safe. However, given your {disability_type} profile, you may want to request minor workplace accommodations (e.g., specialized desk setups) to ensure complete comfort.")
+        else:
+            insights.append(f"<b>Borderline Physical Match:</b> This role meets the minimum safety threshold, but the physical demands might require formal workplace accommodations. Please review the employer's exact environmental requirements carefully.")
+            
+        # 2. Workload & Stamina Analytics
+        if user_hours and job_hours:
+            if user_hours >= job_hours:
+                insights.append(f"<b>Stamina Verification:</b> The employer requires a {job_hours}-hour shift, which falls safely within your documented {user_hours}-hour working capacity. Physical burnout risk for this role is mathematically low.")
+            else:
+                insights.append(f"<b>Stamina Discrepancy:</b> Caution is advised. The role demands {job_hours} hours per shift, but your profile lists a maximum of {user_hours} hours. Consider negotiating a part-time arrangement or split shifts with the HR department.")
+        else:
+            insights.append("<b>Stamina Unverified:</b> Specific working hours were not provided. Ensure the shift length aligns with your personal fatigue limits before accepting.")
+                
+        # 3. Competency & Skill Gap Analysis
+        if not missing_skills and matched_skills:
+            insights.append(f"<b>Complete Skill Alignment:</b> You possess the core competencies identified by the employer ({', '.join(matched_skills[:3])}), making you a highly competitive candidate for immediate onboarding.")
+        elif missing_skills and matched_skills:
+            insights.append(f"<b>Skill Gap Detected:</b> While your background in [{', '.join(matched_skills[:2])}] is valuable, the employer specifically requires proficiency in [{', '.join(missing_skills[:3])}]. Upskilling in these missing areas via PESO training programs will significantly elevate your candidacy.")
+        else:
+            insights.append("<b>Skill Gap Detected:</b> The employer is seeking highly specific technical competencies that are currently missing from your profile. Major upskilling is recommended before applying.")
+            
+        # 4. Actionable Interview Advice (Based on Disability Type)
+        if "Orthopedic" in disability_type:
+            insights.append("<b>Things to Consider (Orthopedic):</b> During the interview, explicitly ask about elevator maintenance reliability, the exact width of desk spaces, and the proximity of accessible restrooms to your workstation.")
+        elif "Visual" in disability_type:
+            insights.append("<b>Things to Consider (Visual):</b> Verify if the employer provides screen-reading software (like NVDA or JAWS) or if you are permitted to install your own assistive software on company hardware.")
+        elif "Hearing" in disability_type:
+            insights.append("<b>Things to Consider (Hearing):</b> Check if the company facility uses visual alarm systems for emergencies and if team meetings are conducted with closed-captioning tools.")
+        elif "Psychosocial" in disability_type:
+            insights.append("<b>Things to Consider (Psychosocial):</b> Ask the employer about designated 'quiet zones' in the office, remote work flexibility, and their official policies on mental health days.")
+
+        return insights
+
+    # --- 1. PREPARE FAISS INDEX ---
+    job_vectors = [json.loads(job['embedding']) for job in approved_jobs]
+    job_vectors_np = np.array(job_vectors).astype('float32')
+    faiss.normalize_L2(job_vectors_np)
+    d = 384 
+    index = faiss.IndexFlatIP(d)
+    index.add(job_vectors_np)
+
+    # --- 2. VECTORIZE PWD PROFILE ---
+    pwd_context = f"Disability Type: {profile.disability_type}. Capabilities: {profile.physical_capabilities}"
+    pwd_vector_np = model.encode(pwd_context, convert_to_numpy=True).astype('float32')
+    pwd_vector_np = np.expand_dims(pwd_vector_np, axis=0) 
+    faiss.normalize_L2(pwd_vector_np)
+
+    # --- 3. FAISS SEARCH EXECUTION ---
+    k = len(approved_jobs) 
+    distances, indices = index.search(pwd_vector_np, k)
+
+    # --- 4. HYBRID SCORING & FILTERING ---
+    # Clean user skills into a set
+    pwd_skills_set = set([s.strip().lower() for s in profile.skills.replace(".", "").split(",") if s.strip()])
     matches = []
+    user_hours = extract_hours(profile.physical_capabilities)
     
-    for job in approved_jobs:
-        # Load the stored job vector
-        job_vector = torch.tensor(json.loads(job['embedding'])).to(device)
+    for i in range(k):
+        job_idx = indices[0][i]
+        cos_sim = distances[0][i] 
+        job = approved_jobs[job_idx]
         
-        # --- A. SEMANTIC SIMILARITY (Physical Match) ---
-        cos_sim = util.cos_sim(pwd_vector, job_vector).item()
-        semantic_score = max(0.0, min(100.0, cos_sim * 100))
+        # Base Semantic Score from FAISS (0 to 100)
+        semantic_score = max(0.0, min(100.0, float(cos_sim) * 100))
         
-        # --- B. KEYWORD MATCHING BONUS (Skills Match) ---
-        job_desc_set = set(job['job_description'].lower().replace(",", "").split())
-        overlap = pwd_skills_set.intersection(job_desc_set)
+        job_hours = extract_hours(job['physical_requirements'])
+        if user_hours and job_hours:
+            if user_hours >= job_hours:
+                semantic_score = min(100.0, semantic_score + 25.0) 
+            else:
+                semantic_score = max(0.0, semantic_score - 40.0) 
         
-        # Calculate keyword score (cap at 100)
-        # If they match 3+ relevant skills, they get a strong bonus
-        keyword_score = min(100.0, (len(overlap) / 3) * 100) 
+        # Skill Gap Math
+        job_req_skills = extract_required_skills(job['job_description'])
+        if job_req_skills:
+            overlap = list(pwd_skills_set.intersection(job_req_skills))
+            missing_skills = list(job_req_skills - pwd_skills_set)
+            keyword_score = min(100.0, (len(overlap) / max(1, len(job_req_skills))) * 100)
+        else:
+            # Fallback if the employer didn't explicitly use the word "skills:"
+            job_desc_set = set(re.findall(r'\b\w+\b', job['job_description'].lower()))
+            overlap = list(pwd_skills_set.intersection(job_desc_set))
+            missing_skills = []
+            keyword_score = min(100.0, (len(overlap) / 3) * 100) 
         
-        # --- C. HYBRID SCORING CALCULATION (From Chapter 1) ---
-        # 70% Weight to Physical Semantic Safety, 30% Weight to Skill Keywords
         final_accessibility_percentage = (semantic_score * 0.70) + (keyword_score * 0.30)
         
-        # Filter Threshold: Only show highly suitable jobs (>= 60%)
+        # Generate the new highly-detailed insights
+        ai_insights = generate_detailed_insights(semantic_score, user_hours, job_hours, overlap, missing_skills, profile.disability_type)
+        
         if final_accessibility_percentage >= 60.0:
             matches.append({
                 "job_id": job['id'],
                 "employer": job['employer_name'],
                 "job_title": job['job_title'],
                 "physical_requirements": job['physical_requirements'],
-                "matched_skills": list(overlap),
+                "matched_skills": overlap,
+                "missing_skills": missing_skills,
                 "metrics": {
                     "semantic_score": round(semantic_score, 1),
                     "keyword_score": round(keyword_score, 1),
                     "final_accessibility_percentage": round(final_accessibility_percentage, 1)
-                }
+                },
+                "ai_insights": ai_insights
             })
             
-    # Sort by highest final percentage first
     matches.sort(key=lambda x: x["metrics"]["final_accessibility_percentage"], reverse=True)
-    
-    return {
-        "applicant": profile.name,
-        "total_safe_matches": len(matches),
-        "matches": matches
-    }
+    return {"applicant": profile.name, "total_safe_matches": len(matches), "matches": matches}
 
-
-# ==========================================
-# 6. DEMO HELPER ROUTINES
-# ==========================================
 @app.get("/api/demo/seed")
 async def seed_demo_data(background_tasks: BackgroundTasks):
-    """Instantly inject realistic Metro Manila jobs for your presentation."""
     demo_jobs = [
-        {
-            "employer_name": "Makati BPO Solutions",
-            "job_title": "Customer Service Representative",
-            "job_description": "Handle incoming calls and emails. Required skills: communication, typing, english, computer.",
-            "physical_requirements": "Requires sitting at a desk for 8 hours. Wheelchair accessible office with ramps and elevator. No heavy lifting required."
-        },
-        {
-            "employer_name": "Quezon City Logistics",
-            "job_title": "Warehouse Inventory Clerk",
-            "job_description": "Manage inventory stock. Required skills: organization, inventory, sorting, computer.",
-            "physical_requirements": "Requires standing for long periods, navigating narrow aisles, and lifting boxes up to 10kg occasionally."
-        }
+        {"employer_name": "Makati BPO Solutions", "job_title": "Customer Service Representative", "job_description": "Handle incoming calls and emails. Required skills: communication, typing, english.", "physical_requirements": "Requires sitting at a desk for 8 hours. Wheelchair accessible office with ramps."},
+        {"employer_name": "Quezon City Logistics", "job_title": "Warehouse Inventory Clerk", "job_description": "Manage inventory stock via database. Required skills: organization, inventory, computer.", "physical_requirements": "Requires standing for long periods and lifting boxes up to 10kg."}
     ]
-    
     conn = get_db_connection()
     cursor = conn.cursor()
-    
     for job in demo_jobs:
         job_id = str(uuid.uuid4())
-        cursor.execute(
-            """
-            INSERT INTO jobs (id, employer_name, job_title, job_description, physical_requirements, status)
-            VALUES (?, ?, ?, ?, ?, 'pending')
-            """,
-            (job_id, job['employer_name'], job['job_title'], job['job_description'], job['physical_requirements'])
-        )
-        # Trigger AI approval automatically for the demo
+        cursor.execute("INSERT INTO jobs (id, employer_name, job_title, job_description, physical_requirements, status) VALUES (?, ?, ?, ?, ?, 'pending')", (job_id, job['employer_name'], job['job_title'], job['job_description'], job['physical_requirements']))
         background_tasks.add_task(generate_job_embedding, job_id, job['physical_requirements'])
-
     conn.commit()
     conn.close()
-    
-    return {"message": "Realistic Metro Manila demo data seeded and AI processing started!"}
+    return {"message": "Demo seeded!"}

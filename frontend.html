@@ -7,12 +7,9 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
-        /* Smooth transitions for Progressive Disclosure UI */
         .fade-in { animation: fadeIn 0.4s ease-in-out; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
         .hidden-step { display: none; }
-        
-        /* Custom Scrollbar for Accessibility */
         ::-webkit-scrollbar { width: 8px; }
         ::-webkit-scrollbar-track { background: #f1f5f9; }
         ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
@@ -21,7 +18,6 @@
 </head>
 <body class="bg-slate-50 text-slate-800 font-sans min-h-screen flex flex-col">
 
-    <!-- Navigation Bar -->
     <nav class="bg-blue-700 text-white shadow-md sticky top-0 z-40">
         <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
             <div class="flex items-center justify-between h-16">
@@ -30,20 +26,17 @@
                     <span class="font-bold text-xl tracking-wide">UPLIFT AI</span>
                 </div>
                 <div class="flex space-x-1 sm:space-x-4">
-                    <button onclick="switchView('pwd-view')" class="nav-btn px-3 py-2 rounded-md text-sm font-medium hover:bg-blue-600 transition" id="nav-pwd-view">PWD Portal</button>
-                    <button onclick="switchView('employer-view')" class="nav-btn px-3 py-2 rounded-md text-sm font-medium hover:bg-blue-600 transition" id="nav-employer-view">Employers</button>
-                    <button onclick="switchView('admin-view')" class="nav-btn px-3 py-2 rounded-md text-sm font-medium hover:bg-blue-600 transition" id="nav-admin-view">NCDA Admin</button>
+                    <button onclick="switchView('pwd-view')" class="nav-btn px-3 py-2 rounded-md text-sm font-medium transition" id="nav-pwd-view">PWD Portal</button>
+                    <button onclick="switchView('employer-view')" class="nav-btn px-3 py-2 rounded-md text-sm font-medium transition" id="nav-employer-view">Employers</button>
+                    <button onclick="switchView('admin-view')" class="nav-btn px-3 py-2 rounded-md text-sm font-medium transition" id="nav-admin-view">NCDA Admin</button>
                 </div>
             </div>
         </div>
     </nav>
 
-    <!-- Main Content Container -->
     <main class="flex-grow max-w-6xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-8">
         
-        <!-- ========================================== -->
-        <!-- 1. PWD PORTAL (PROGRESSIVE DISCLOSURE UI)  -->
-        <!-- ========================================== -->
+        <!-- PWD PORTAL -->
         <section id="pwd-view" class="view-section fade-in">
             <div class="text-center mb-8">
                 <h1 class="text-3xl font-bold text-slate-900 mb-2">Find a Safe, Suitable Workplace</h1>
@@ -51,51 +44,42 @@
             </div>
 
             <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                <!-- Progressive Disclosure Form -->
                 <div class="lg:col-span-1 bg-white p-6 rounded-xl shadow-sm border border-slate-200 h-fit">
                     <h2 class="text-xl font-semibold mb-4 border-b pb-2">Your Profile</h2>
                     <form id="pwd-form" onsubmit="handlePwdMatch(event)">
-                        
                         <div class="space-y-4">
                             <div>
                                 <label class="block text-sm font-medium text-slate-700 mb-1">Full Name</label>
-                                <input type="text" id="pwd-name" required placeholder="e.g., Juan Dela Cruz" class="w-full p-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition">
+                                <input type="text" id="pwd-name" required placeholder="e.g., Juan Dela Cruz" class="w-full p-2.5 border border-slate-300 rounded-lg outline-none">
                             </div>
-                            
                             <div>
                                 <label class="block text-sm font-medium text-slate-700 mb-1">Disability Type</label>
-                                <select id="pwd-type" class="w-full p-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white">
+                                <select id="pwd-type" class="w-full p-2.5 border border-slate-300 rounded-lg outline-none bg-white">
                                     <option value="Orthopedic">Orthopedic / Motor</option>
                                     <option value="Visual">Visual Impairment</option>
                                     <option value="Hearing">Hearing Impairment</option>
                                     <option value="Psychosocial">Psychosocial</option>
                                 </select>
                             </div>
-
                             <div>
                                 <label class="block text-sm font-medium text-slate-700 mb-1">Physical Capabilities</label>
-                                <p class="text-xs text-slate-500 mb-2">Describe what you can comfortably do physically.</p>
-                                <textarea id="pwd-capabilities" required rows="3" placeholder="e.g., I use a wheelchair. I can type and use a computer comfortably, but cannot reach high shelves or lift heavy items." class="w-full p-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none resize-none"></textarea>
+                                <textarea id="pwd-capabilities" required rows="3" placeholder="e.g., I can work 10 hours. I use a wheelchair." class="w-full p-2.5 border border-slate-300 rounded-lg outline-none resize-none"></textarea>
                             </div>
-
                             <div>
                                 <label class="block text-sm font-medium text-slate-700 mb-1">Professional Skills</label>
-                                <p class="text-xs text-slate-500 mb-2">Comma separated (e.g., typing, customer service, english)</p>
-                                <input type="text" id="pwd-skills" required placeholder="typing, computer, communication" class="w-full p-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
+                                <input type="text" id="pwd-skills" required placeholder="typing, computer, communication" class="w-full p-2.5 border border-slate-300 rounded-lg outline-none">
                             </div>
                         </div>
-
                         <button type="submit" class="mt-6 w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 px-4 rounded-lg transition flex items-center justify-center gap-2">
                             <i class="fa-solid fa-robot"></i> Find Safe Matches
                         </button>
                     </form>
                 </div>
 
-                <!-- AI Matches Display -->
                 <div class="lg:col-span-2">
                     <div id="loading-indicator" class="hidden flex-col items-center justify-center h-64 text-slate-500">
                         <i class="fa-solid fa-circle-notch fa-spin text-4xl text-blue-500 mb-4"></i>
-                        <p>Our Semantic AI is analyzing physical compatibility...</p>
+                        <p>Semantic AI is analyzing physical compatibility...</p>
                     </div>
 
                     <div id="matches-container" class="hidden">
@@ -103,251 +87,112 @@
                             <h2 class="text-2xl font-bold text-slate-800">Your AI Curated Matches</h2>
                             <span id="match-count" class="bg-blue-100 text-blue-800 text-sm font-semibold px-3 py-1 rounded-full"></span>
                         </div>
-                        <div id="matches-list" class="space-y-4">
-                            <!-- Match Cards Inject Here -->
-                        </div>
+                        <div id="matches-list" class="space-y-4"></div>
                     </div>
 
                     <div id="empty-state" class="flex flex-col items-center justify-center h-full min-h-[300px] text-slate-400 bg-white rounded-xl border border-slate-200 border-dashed">
                         <i class="fa-solid fa-magnifying-glass text-4xl mb-3"></i>
                         <p>Fill out your profile and click "Find Safe Matches"</p>
-                        <p class="text-sm mt-2 text-center px-4">The AI will use Sentence Transformers to calculate your Accessibility Percentage.</p>
                     </div>
                 </div>
             </div>
         </section>
 
-        <!-- ========================================== -->
-        <!-- 2. EMPLOYER PORTAL                         -->
-        <!-- ========================================== -->
+        <!-- EMPLOYER PORTAL -->
         <section id="employer-view" class="view-section hidden-step fade-in max-w-2xl mx-auto">
-            <div class="text-center mb-8">
-                <h1 class="text-3xl font-bold text-slate-900 mb-2">Submit an Inclusive Job</h1>
-                <p class="text-slate-600">Provide specific physical requirements so our AI can find suitable PWD candidates.</p>
-            </div>
-
             <div class="bg-white p-6 sm:p-8 rounded-xl shadow-sm border border-slate-200">
                 <form id="employer-form" onsubmit="handleEmployerSubmit(event)">
                     <div class="space-y-5">
-                        <div>
-                            <label class="block text-sm font-medium text-slate-700 mb-1">Company / Employer Name</label>
-                            <input type="text" id="emp-name" required class="w-full p-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
-                        </div>
-                        
-                        <div>
-                            <label class="block text-sm font-medium text-slate-700 mb-1">Job Title</label>
-                            <input type="text" id="emp-title" required class="w-full p-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
-                        </div>
-
-                        <div>
-                            <label class="block text-sm font-medium text-slate-700 mb-1">Job Description & Required Skills</label>
-                            <textarea id="emp-desc" required rows="3" class="w-full p-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none resize-none"></textarea>
-                        </div>
-
+                        <div><label class="block text-sm font-medium mb-1">Employer Name</label><input type="text" id="emp-name" required class="w-full p-2.5 border rounded-lg"></div>
+                        <div><label class="block text-sm font-medium mb-1">Job Title</label><input type="text" id="emp-title" required class="w-full p-2.5 border rounded-lg"></div>
+                        <div><label class="block text-sm font-medium mb-1">Job Description</label><textarea id="emp-desc" required rows="3" class="w-full p-2.5 border rounded-lg"></textarea></div>
                         <div class="bg-blue-50 p-4 rounded-lg border border-blue-100">
-                            <label class="block text-sm font-bold text-blue-900 mb-1"><i class="fa-solid fa-wheelchair mr-1"></i> Physical & Environmental Requirements</label>
-                            <p class="text-xs text-blue-700 mb-2">Crucial for AI Matching: Describe the physical environment (stairs, sitting time, lifting).</p>
-                            <textarea id="emp-phys" required rows="3" placeholder="e.g., Requires standing for 4 hours. No elevator access. Must lift 5kg." class="w-full p-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none resize-none"></textarea>
+                            <label class="block text-sm font-bold text-blue-900 mb-1">Physical & Environmental Requirements</label>
+                            <textarea id="emp-phys" required rows="3" placeholder="e.g., Requires standing for 8 hours. Must lift 5kg." class="w-full p-2.5 border rounded-lg"></textarea>
                         </div>
                     </div>
-                    
-                    <button type="submit" class="mt-6 w-full bg-slate-800 hover:bg-slate-900 text-white font-medium py-3 px-4 rounded-lg transition flex items-center justify-center gap-2">
-                        <i class="fa-solid fa-paper-plane"></i> Submit for NCDA Verification
-                    </button>
+                    <button type="submit" class="mt-6 w-full bg-slate-800 text-white font-medium py-3 rounded-lg">Submit for Verification</button>
                 </form>
             </div>
         </section>
 
-        <!-- ========================================== -->
-        <!-- 3. NCDA ADMIN DASHBOARD                    -->
-        <!-- ========================================== -->
+        <!-- NCDA ADMIN -->
         <section id="admin-view" class="view-section hidden-step fade-in">
-            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 gap-4">
-                <div>
-                    <h1 class="text-3xl font-bold text-slate-900 mb-2">NCDA Verification Dashboard</h1>
-                    <p class="text-slate-600">Review employer submissions and trigger the AI Vectorization Engine.</p>
-                </div>
-                <button onclick="seedDemoData()" class="bg-emerald-100 hover:bg-emerald-200 text-emerald-800 px-4 py-2 rounded-lg font-medium transition flex items-center gap-2 border border-emerald-300">
-                    <i class="fa-solid fa-database"></i> Seed Demo Jobs
-                </button>
+            <div class="flex justify-between items-center mb-8">
+                <h1 class="text-3xl font-bold">NCDA Verification</h1>
+                <button onclick="seedDemoData()" class="bg-emerald-100 text-emerald-800 px-4 py-2 rounded-lg font-medium"><i class="fa-solid fa-database"></i> Seed Demo Jobs</button>
             </div>
-
-            <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-                <div class="flex border-b border-slate-200">
-                    <button onclick="fetchAdminJobs('pending')" class="flex-1 py-4 font-medium text-blue-700 bg-blue-50 border-b-2 border-blue-600 focus:outline-none transition" id="tab-pending">Pending Verification</button>
-                    <button onclick="fetchAdminJobs('approved')" class="flex-1 py-4 font-medium text-slate-600 hover:bg-slate-50 focus:outline-none transition" id="tab-approved">Approved (AI Vectorized)</button>
+            <div class="bg-white rounded-xl shadow-sm border overflow-hidden">
+                <div class="flex border-b">
+                    <button onclick="fetchAdminJobs('pending')" class="flex-1 py-4 font-medium" id="tab-pending">Pending</button>
+                    <button onclick="fetchAdminJobs('approved')" class="flex-1 py-4 font-medium" id="tab-approved">Approved</button>
                 </div>
-                
-                <div class="p-6">
-                    <div id="admin-jobs-list" class="space-y-4">
-                        <!-- Admin Jobs Inject Here -->
-                    </div>
-                </div>
+                <div class="p-6"><div id="admin-jobs-list" class="space-y-4"></div></div>
             </div>
         </section>
-
     </main>
 
-    <!-- Toast Notification Container -->
     <div id="toast-container" class="fixed bottom-4 right-4 z-50 flex flex-col gap-2"></div>
 
     <script>
         const API_BASE_URL = 'http://127.0.0.1:8000/api';
         let currentAdminTab = 'pending';
 
-        // --- UI NAVIGATION ---
         function switchView(viewId) {
-            document.querySelectorAll('.view-section').forEach(el => {
-                el.classList.add('hidden-step');
-            });
+            document.querySelectorAll('.view-section').forEach(el => el.classList.add('hidden-step'));
             document.getElementById(viewId).classList.remove('hidden-step');
-            
-            // Highlight nav
-            document.querySelectorAll('.nav-btn').forEach(el => {
-                el.classList.remove('bg-blue-800');
-            });
+            document.querySelectorAll('.nav-btn').forEach(el => el.classList.remove('bg-blue-800'));
             document.getElementById('nav-' + viewId).classList.add('bg-blue-800');
-
-            if(viewId === 'admin-view') {
-                fetchAdminJobs(currentAdminTab);
-            }
+            if(viewId === 'admin-view') fetchAdminJobs(currentAdminTab);
         }
-        // Init default view
         switchView('pwd-view');
 
-        // --- TOAST NOTIFICATIONS ---
         function showToast(message, type = 'success') {
             const container = document.getElementById('toast-container');
             const toast = document.createElement('div');
-            const bgColor = type === 'success' ? 'bg-emerald-600' : (type === 'error' ? 'bg-red-600' : 'bg-blue-600');
-            const icon = type === 'success' ? 'fa-check-circle' : (type === 'error' ? 'fa-triangle-exclamation' : 'fa-info-circle');
-            
-            toast.className = `${bgColor} text-white px-4 py-3 rounded-lg shadow-lg flex items-center gap-3 transform transition-all duration-300 translate-y-10 opacity-0`;
-            toast.innerHTML = `<i class="fa-solid ${icon}"></i> <span>${message}</span>`;
-            
+            const bgColor = type === 'success' ? 'bg-emerald-600' : 'bg-red-600';
+            toast.className = `${bgColor} text-white px-4 py-3 rounded-lg shadow-lg transform transition-all translate-y-10 opacity-0`;
+            toast.innerHTML = message;
             container.appendChild(toast);
-            
-            // Animate in
-            setTimeout(() => {
-                toast.classList.remove('translate-y-10', 'opacity-0');
-            }, 10);
-            
-            // Animate out and remove
-            setTimeout(() => {
-                toast.classList.add('translate-y-10', 'opacity-0');
-                setTimeout(() => toast.remove(), 300);
-            }, 4000);
+            setTimeout(() => toast.classList.remove('translate-y-10', 'opacity-0'), 10);
+            setTimeout(() => { toast.classList.add('translate-y-10', 'opacity-0'); setTimeout(() => toast.remove(), 300); }, 4000);
         }
 
-        // --- 1. EMPLOYER LOGIC ---
         async function handleEmployerSubmit(e) {
             e.preventDefault();
-            const payload = {
-                employer_name: document.getElementById('emp-name').value,
-                job_title: document.getElementById('emp-title').value,
-                job_description: document.getElementById('emp-desc').value,
-                physical_requirements: document.getElementById('emp-phys').value
-            };
-
-            try {
-                const res = await fetch(`${API_BASE_URL}/employer/submit-job`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
-                });
-                if(res.ok) {
-                    showToast('Job submitted! Waiting for NCDA approval.');
-                    document.getElementById('employer-form').reset();
-                } else {
-                    showToast('Failed to connect to backend.', 'error');
-                }
-            } catch (err) {
-                showToast('Backend offline. Make sure server.py is running on port 8000.', 'error');
-            }
+            const payload = { employer_name: document.getElementById('emp-name').value, job_title: document.getElementById('emp-title').value, job_description: document.getElementById('emp-desc').value, physical_requirements: document.getElementById('emp-phys').value };
+            const res = await fetch(`${API_BASE_URL}/employer/submit-job`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+            if(res.ok) { showToast('Job submitted!'); document.getElementById('employer-form').reset(); }
         }
 
-        // --- 2. NCDA ADMIN LOGIC ---
         async function fetchAdminJobs(status) {
             currentAdminTab = status;
-            
-            // Update tabs UI
-            document.getElementById('tab-pending').className = status === 'pending' ? 'flex-1 py-4 font-medium text-blue-700 bg-blue-50 border-b-2 border-blue-600 transition' : 'flex-1 py-4 font-medium text-slate-600 hover:bg-slate-50 border-b border-transparent transition';
-            document.getElementById('tab-approved').className = status === 'approved' ? 'flex-1 py-4 font-medium text-blue-700 bg-blue-50 border-b-2 border-blue-600 transition' : 'flex-1 py-4 font-medium text-slate-600 hover:bg-slate-50 border-b border-transparent transition';
-
+            document.getElementById('tab-pending').className = status === 'pending' ? 'flex-1 py-4 text-blue-700 bg-blue-50 border-b-2 border-blue-600' : 'flex-1 py-4 text-slate-600 hover:bg-slate-50';
+            document.getElementById('tab-approved').className = status === 'approved' ? 'flex-1 py-4 text-blue-700 bg-blue-50 border-b-2 border-blue-600' : 'flex-1 py-4 text-slate-600 hover:bg-slate-50';
+            const res = await fetch(`${API_BASE_URL}/admin/jobs/${status}`);
+            const data = await res.json();
             const container = document.getElementById('admin-jobs-list');
-            container.innerHTML = '<p class="text-slate-500 text-center py-4">Loading jobs...</p>';
-
-            try {
-                const res = await fetch(`${API_BASE_URL}/admin/jobs/${status}`);
-                const data = await res.json();
-                
-                if (data.jobs.length === 0) {
-                    container.innerHTML = `<p class="text-slate-500 text-center py-8 bg-slate-50 rounded-lg border border-dashed border-slate-300">No ${status} jobs found.</p>`;
-                    return;
-                }
-
-                container.innerHTML = '';
-                data.jobs.forEach(job => {
-                    const el = document.createElement('div');
-                    el.className = 'border border-slate-200 p-4 rounded-lg hover:shadow-md transition bg-white';
-                    
-                    let actionBtn = '';
-                    if (status === 'pending') {
-                        actionBtn = `<button onclick="approveJob('${job.id}')" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition flex items-center gap-2"><i class="fa-solid fa-microchip"></i> Approve & Generate AI Vector</button>`;
-                    } else {
-                        actionBtn = `<span class="bg-emerald-100 text-emerald-800 px-3 py-1 rounded-md text-xs font-bold flex items-center gap-1"><i class="fa-solid fa-check"></i> Vectorized (pgvector ready)</span>`;
-                    }
-
-                    el.innerHTML = `
-                        <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                            <div>
-                                <h3 class="font-bold text-lg text-slate-800">${job.job_title} <span class="text-sm font-normal text-slate-500 ml-2">@ ${job.employer_name}</span></h3>
-                                <div class="mt-2 text-sm text-slate-600 bg-slate-50 p-2 rounded border border-slate-100">
-                                    <strong class="text-slate-700">Physical Req:</strong> ${job.physical_requirements}
-                                </div>
-                            </div>
-                            <div class="shrink-0">
-                                ${actionBtn}
-                            </div>
-                        </div>
-                    `;
-                    container.appendChild(el);
-                });
-            } catch (err) {
-                container.innerHTML = '<p class="text-red-500 text-center py-4">Error connecting to server. Is FastAPI running?</p>';
-            }
+            if (data.jobs.length === 0) { container.innerHTML = '<p class="text-center py-8">No jobs found.</p>'; return; }
+            container.innerHTML = data.jobs.map(job => `
+                <div class="border p-4 rounded-lg bg-white flex justify-between items-center">
+                    <div><h3 class="font-bold">${job.job_title}</h3><p class="text-sm text-slate-600">${job.physical_requirements}</p></div>
+                    ${status === 'pending' ? `<button onclick="approveJob('${job.id}')" class="bg-blue-600 text-white px-4 py-2 rounded">Approve</button>` : `<span class="bg-emerald-100 px-3 py-1 rounded text-emerald-800">Vectorized</span>`}
+                </div>`).join('');
         }
 
         async function approveJob(jobId) {
-            try {
-                const res = await fetch(`${API_BASE_URL}/admin/approve-job/${jobId}`, { method: 'POST' });
-                if(res.ok) {
-                    showToast('Job Approved! Semantic AI is generating embeddings in the background.', 'success');
-                    fetchAdminJobs('pending'); // refresh list
-                }
-            } catch (err) {
-                showToast('Action failed. Server offline.', 'error');
-            }
+            await fetch(`${API_BASE_URL}/admin/approve-job/${jobId}`, { method: 'POST' });
+            showToast('Job Approved!'); fetchAdminJobs('pending');
         }
 
         async function seedDemoData() {
-            try {
-                const res = await fetch(`${API_BASE_URL}/demo/seed`);
-                if(res.ok) {
-                    showToast('Demo data seeded successfully!', 'info');
-                    if(document.getElementById('admin-view').classList.contains('hidden-step') === false){
-                        fetchAdminJobs(currentAdminTab);
-                    }
-                }
-            } catch(err) {
-                showToast('Failed to seed data. Server offline.', 'error');
-            }
+            await fetch(`${API_BASE_URL}/demo/seed`);
+            showToast('Demo data seeded!');
+            if(!document.getElementById('admin-view').classList.contains('hidden-step')) fetchAdminJobs(currentAdminTab);
         }
 
-        // --- 3. PWD MATCHING LOGIC (CORE ENGINE UI) ---
         async function handlePwdMatch(e) {
             e.preventDefault();
-            
             document.getElementById('empty-state').classList.add('hidden');
             document.getElementById('matches-container').classList.add('hidden');
             document.getElementById('loading-indicator').classList.remove('hidden');
@@ -360,96 +205,60 @@
                 skills: document.getElementById('pwd-skills').value
             };
 
-            try {
-                const res = await fetch(`${API_BASE_URL}/pwd/match`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
-                });
-                
-                const data = await res.json();
-                
-                // Simulate a slight AI thinking delay for demo effect
-                setTimeout(() => {
-                    document.getElementById('loading-indicator').classList.add('hidden');
-                    document.getElementById('loading-indicator').classList.remove('flex');
-                    document.getElementById('matches-container').classList.remove('hidden');
-                    
-                    renderMatches(data);
-                }, 1000);
-
-            } catch (err) {
+            const res = await fetch(`${API_BASE_URL}/pwd/match`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+            const data = await res.json();
+            
+            setTimeout(() => {
                 document.getElementById('loading-indicator').classList.add('hidden');
-                document.getElementById('empty-state').classList.remove('hidden');
-                showToast('Backend offline. Cannot compute Accessibility Percentage.', 'error');
-            }
+                document.getElementById('loading-indicator').classList.remove('flex');
+                document.getElementById('matches-container').classList.remove('hidden');
+                renderMatches(data);
+            }, 800);
         }
 
         function renderMatches(data) {
             const container = document.getElementById('matches-list');
-            container.innerHTML = '';
-            
             document.getElementById('match-count').innerText = `${data.total_safe_matches} Safe Jobs Found`;
-
+            
             if(data.total_safe_matches === 0) {
-                container.innerHTML = `<div class="p-8 text-center bg-white border border-slate-200 rounded-xl"><p class="text-slate-600">No safe matches found above the 60% threshold. Try updating your skills.</p></div>`;
-                return;
+                container.innerHTML = `<div class="p-8 text-center bg-white border rounded-xl">No safe matches found above 60%.</div>`; return;
             }
 
-            data.matches.forEach(match => {
-                // Determine color based on score
-                let scoreColor = match.metrics.final_accessibility_percentage >= 80 ? 'text-emerald-600' : 'text-blue-600';
-                let ringColor = match.metrics.final_accessibility_percentage >= 80 ? 'ring-emerald-500' : 'ring-blue-500';
-
-                const el = document.createElement('div');
-                el.className = 'bg-white border border-slate-200 rounded-xl p-5 hover:shadow-lg transition duration-300';
-                
-                el.innerHTML = `
+            container.innerHTML = data.matches.map(match => `
+                <div class="bg-white border border-slate-200 rounded-xl p-5 hover:shadow-lg transition">
                     <div class="flex flex-col sm:flex-row justify-between gap-6">
                         <div class="flex-1">
-                            <h3 class="text-xl font-bold text-slate-800">${match.job_title}</h3>
-                            <p class="text-blue-700 font-medium text-sm mb-3"><i class="fa-regular fa-building mr-1"></i> ${match.employer}</p>
+                            <h3 class="text-xl font-bold text-slate-800">${match.job_title} <span class="text-sm font-normal text-blue-700 ml-2">@ ${match.employer}</span></h3>
                             
-                            <div class="bg-slate-50 p-3 rounded-lg border border-slate-100 mb-3">
-                                <p class="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Physical Requirements</p>
+                            <div class="mt-3 mb-4">
+                                <p class="text-xs font-bold text-slate-500 uppercase">Physical Requirements</p>
                                 <p class="text-sm text-slate-700">${match.physical_requirements}</p>
                             </div>
                             
+                            <!-- THIS IS THE NEW DETAILED AI INSIGHTS BOX -->
+                            <div class="bg-blue-50 border border-blue-100 rounded-lg p-4 mb-4">
+                                <p class="text-xs font-bold text-blue-900 uppercase tracking-wider mb-2"><i class="fa-solid fa-wand-magic-sparkles mr-1"></i> AI Suitability Analysis</p>
+                                <ul class="space-y-1.5">
+                                    ${match.ai_insights.map(insight => `<li class="text-sm text-blue-800 flex items-start"><i class="fa-solid fa-check text-emerald-500 mt-1 mr-2 text-xs"></i> <span>${insight}</span></li>`).join('')}
+                                </ul>
+                            </div>
+                            
                             <div class="flex flex-wrap gap-2">
-                                <span class="text-xs font-bold text-slate-500 uppercase tracking-wider self-center mr-1">Matched Skills:</span>
-                                ${match.matched_skills.map(s => `<span class="bg-slate-200 text-slate-700 px-2 py-1 rounded text-xs font-medium">${s}</span>`).join('')}
-                                ${match.matched_skills.length === 0 ? '<span class="text-xs text-slate-400">None exact</span>' : ''}
+                                <span class="text-xs font-bold text-slate-500 uppercase self-center">Matched Skills:</span>
+                                ${match.matched_skills.map(s => `<span class="bg-slate-200 text-slate-700 px-2 py-1 rounded text-xs">${s}</span>`).join('')}
                             </div>
                         </div>
 
-                        <!-- Hybrid Scoring Dashboard -->
-                        <div class="sm:w-48 shrink-0 flex flex-col items-center justify-center bg-slate-50 rounded-xl p-4 border border-slate-100 relative overflow-hidden">
-                            <!-- Visual Ring -->
-                            <div class="w-24 h-24 rounded-full ring-4 ${ringColor} ring-offset-2 flex items-center justify-center bg-white shadow-inner mb-3">
-                                <span class="text-2xl font-black ${scoreColor}">${match.metrics.final_accessibility_percentage}%</span>
+                        <div class="sm:w-48 shrink-0 flex flex-col items-center bg-slate-50 rounded-xl p-4 border">
+                            <div class="w-24 h-24 rounded-full ring-4 ${match.metrics.final_accessibility_percentage >= 80 ? 'ring-emerald-500' : 'ring-blue-500'} flex items-center justify-center bg-white mb-2">
+                                <span class="text-2xl font-black ${match.metrics.final_accessibility_percentage >= 80 ? 'text-emerald-600' : 'text-blue-600'}">${match.metrics.final_accessibility_percentage}%</span>
                             </div>
-                            <p class="text-xs font-bold text-slate-800 text-center uppercase tracking-wider">Accessibility Match</p>
-                            
-                            <div class="w-full mt-3 pt-3 border-t border-slate-200 space-y-1">
-                                <div class="flex justify-between text-[10px] text-slate-500 font-medium">
-                                    <span>Semantic (70%):</span>
-                                    <span>${match.metrics.semantic_score}%</span>
-                                </div>
-                                <div class="flex justify-between text-[10px] text-slate-500 font-medium">
-                                    <span>Keyword (30%):</span>
-                                    <span>${match.metrics.keyword_score}%</span>
-                                </div>
-                            </div>
+                            <p class="text-[10px] font-bold text-slate-500 uppercase">Semantic: ${match.metrics.semantic_score}%</p>
+                            <p class="text-[10px] font-bold text-slate-500 uppercase">Keyword: ${match.metrics.keyword_score}%</p>
                         </div>
                     </div>
-                    <div class="mt-4 pt-4 border-t border-slate-100 flex justify-end">
-                        <button class="bg-slate-800 hover:bg-slate-900 text-white px-6 py-2 rounded-lg text-sm font-medium transition">
-                            Apply Safely
-                        </button>
-                    </div>
-                `;
-                container.appendChild(el);
-            });
+                </div>
+            `).join('');
         }
     </script>
 </body>
