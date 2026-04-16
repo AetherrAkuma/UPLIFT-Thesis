@@ -1,0 +1,5 @@
+.venv
+.venv/*
+uplift_prototype.db
+__pycache__/
+*.pyc
