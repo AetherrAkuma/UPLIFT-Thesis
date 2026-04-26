@@ -136,6 +136,25 @@
         }
         #accessibility-panel.open { transform: translateX(0); }
 
+        @media (max-width: 640px) {
+            #accessibility-panel {
+                left: 12px;
+                right: 12px;
+                width: auto;
+                bottom: 80px;
+                max-height: calc(100vh - 100px);
+                transform: translateY(120%);
+            }
+            #accessibility-panel.open { transform: translateY(0); }
+            
+            #accessibility-fab {
+                bottom: 16px;
+                left: 16px;
+                width: 50px;
+                height: 50px;
+            }
+        }
+
         .a11y-option-card {
             background: var(--bg-main);
             border: 1px solid var(--card-border);
@@ -191,10 +210,10 @@
                     <i class="fa-solid fa-universal-access text-2xl"></i>
                     <span class="font-bold text-xl tracking-wide">UPLIFT AI</span>
                 </div>
-                <div class="flex space-x-1 sm:space-x-4">
-                    <button onclick="switchView('pwd-view')" class="nav-btn px-3 py-2 rounded-md text-sm font-medium transition" id="nav-pwd-view">PWD Portal</button>
-                    <button onclick="switchView('employer-view')" class="nav-btn px-3 py-2 rounded-md text-sm font-medium transition" id="nav-employer-view">Employers</button>
-                    <button onclick="switchView('admin-view')" class="nav-btn px-3 py-2 rounded-md text-sm font-medium transition" id="nav-admin-view">Admin</button>
+                <div class="flex flex-wrap justify-center gap-1 sm:gap-4">
+                    <button onclick="switchView('pwd-view')" class="nav-btn px-2 sm:px-3 py-1 sm:py-2 rounded-md text-[10px] sm:text-sm font-medium transition" id="nav-pwd-view">PWD Portal</button>
+                    <button onclick="switchView('employer-view')" class="nav-btn px-2 sm:px-3 py-1 sm:py-2 rounded-md text-[10px] sm:text-sm font-medium transition" id="nav-employer-view">Employers</button>
+                    <button onclick="switchView('admin-view')" class="nav-btn px-2 sm:px-3 py-1 sm:py-2 rounded-md text-[10px] sm:text-sm font-medium transition" id="nav-admin-view">Admin</button>
                 </div>
             </div>
         </div>
@@ -472,6 +491,9 @@
     <!-- OCR Processing Modal -->
     <div id="ocr-modal" class="fixed inset-0 z-[60] hidden flex items-center justify-center bg-slate-900/80 backdrop-blur-sm p-4">
     <script>
+        const API_BASE_URL = 'http://127.0.0.1:8000/api';
+        let currentAdminTab = 'pending';
+
 
         // Accessibility State
         let a11yConfig = JSON.parse(localStorage.getItem('upliftA11y')) || {
@@ -873,7 +895,7 @@
 
             const payload = {
                 name: document.getElementById('pwd-name').value,
-                disability_types: selected,
+                disability_types: selected.map(d => `${d.category} - ${d.sub}`),
                 physical_capabilities: document.getElementById('pwd-capabilities').value,
                 skills: document.getElementById('pwd-skills').value
             };
@@ -898,17 +920,17 @@
             }
 
             container.innerHTML = data.matches.map((match, idx) => {
-                const safety = match.metrics.safety_score;
-                const safetyClass = safety >= 80 ? 'safety-badge-high' : safety > 50 ? 'safety-badge-med' : 'safety-badge-low';
-                const safetyIcon = safety >= 80 ? 'fa-shield-check' : safety > 50 ? 'fa-shield-halved' : 'fa-triangle-exclamation';
-                const safetyLabel = safety >= 80 ? 'High Safety' : safety > 50 ? 'Moderate Safety' : 'Warning: Review Required';
+                const overallScore = match.metrics.final_accessibility_percentage;
+                const safetyClass = overallScore >= 80 ? 'safety-badge-high' : overallScore >= 50 ? 'safety-badge-med' : 'safety-badge-low';
+                const safetyIcon = overallScore >= 80 ? 'fa-shield-check' : overallScore >= 50 ? 'fa-shield-halved' : 'fa-triangle-exclamation';
+                const safetyLabel = overallScore >= 80 ? 'Recommended' : overallScore >= 50 ? 'Moderate Safety' : 'Warning: Review Required';
                 
                 return `
                 <div class="match-card rounded-2xl p-6 mb-4 animate-in slide-in-from-bottom duration-500" style="animation-delay: ${idx * 100}ms">
                     <div class="flex flex-col md:flex-row justify-between gap-6">
                         <div class="flex-1">
                             <div class="flex items-center gap-2 mb-1">
-                                <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase ${safetyClass} flex items-center gap-1 ${safety <= 50 ? 'animate-pulse' : ''}">
+                                <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase ${safetyClass} flex items-center gap-1 ${overallScore < 50 ? 'animate-pulse' : ''}">
                                     <i class="fa-solid ${safetyIcon}"></i> ${safetyLabel}
                                 </span>
                                 <span class="text-[10px] text-slate-400 font-bold uppercase tracking-widest">• ${match.employer_type}</span>
