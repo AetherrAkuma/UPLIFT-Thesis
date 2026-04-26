@@ -6,7 +6,59 @@
     <title>UPLIFT AI | Inclusive Employment</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Lexend:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
+        :root {
+            /* Theme Colors */
+            --primary: #1d4ed8; /* blue-700 */
+            --primary-hover: #1e40af; /* blue-800 */
+            --bg-main: #f8fafc; /* slate-50 */
+            --text-main: #1e293b; /* slate-800 */
+            --text-muted: #64748b; /* slate-500 */
+            --card-bg: #ffffff;
+            --card-border: #e2e8f0;
+            
+            /* Typography */
+            --font-main: 'Inter', sans-serif;
+            --base-size: 16px;
+            --scale-factor: 1;
+        }
+
+        .dyslexia-font { --font-main: 'Lexend', sans-serif !important; }
+
+        /* High Contrast Theme */
+        .high-contrast {
+            --primary: #ffff00 !important;
+            --primary-hover: #e6e600 !important;
+            --bg-main: #000000 !important;
+            --text-main: #ffff00 !important;
+            --text-muted: #ffffff !important;
+            --card-bg: #000000 !important;
+            --card-border: #ffff00 !important;
+        }
+
+        /* Grayscale Theme */
+        .grayscale-theme { filter: grayscale(100%); }
+
+        /* Dark Mode Theme */
+        .dark-mode {
+            --bg-main: #0f172a !important;
+            --text-main: #f1f5f9 !important;
+            --text-muted: #94a3b8 !important;
+            --card-bg: #1e293b !important;
+            --card-border: #334155 !important;
+        }
+
+        body { 
+            background-color: var(--bg-main); 
+            color: var(--text-main); 
+            font-family: var(--font-main);
+            font-size: calc(var(--base-size) * var(--scale-factor));
+            transition: background-color 0.3s, color 0.3s;
+        }
+
+        h1, h2, h3, h4, h5, h6 { color: var(--text-main) !important; }
+        p, span, label, input, textarea, select { font-size: 1em; }
         .fade-in { animation: fadeIn 0.4s ease-in-out; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
         .hidden-step { display: none; }
@@ -14,11 +66,125 @@
         ::-webkit-scrollbar-track { background: #f1f5f9; }
         ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
         ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        
+        /* New Smooth Transitions */
+        .admin-card-exit { transform: translateX(20px); opacity: 0; transition: all 0.4s ease-out; }
+        .processing-pulse { animation: processingPulse 1.5s infinite; }
+        @keyframes processingPulse { 0% { opacity: 1; } 50% { opacity: 0.6; } 100% { opacity: 1; } }
+
+        .disclosure-content {
+            display: grid;
+            grid-template-rows: 0fr;
+            transition: grid-template-rows 0.3s ease-out, opacity 0.3s;
+            opacity: 0;
+            visibility: hidden;
+        }
+        .disclosure-content.open {
+            grid-template-rows: 1fr;
+            opacity: 1;
+            visibility: visible;
+            padding-top: 1rem;
+        }
+        .disclosure-inner { overflow: hidden; }
+
+        /* Premium Match Card Layout */
+        .match-card {
+            background: white;
+            border: 1px solid #e2e8f0;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .match-card:hover {
+            border-color: #3b82f6;
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px -5px rgba(59, 130, 246, 0.1);
+        }
+        .safety-badge-high { background: #f0fdf4; color: #166534; border: 1px solid #bbf7d0; }
+        .safety-badge-med { background: #fffbeb; color: #92400e; border: 1px solid #fde68a; }
+        .safety-badge-low { background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; }
+        
+        /* Alive & Appealing Micro-animations */
+        .cat-card { transition: all 0.3s ease; }
+        .cat-card:hover { border-color: #3b82f6; background-color: #f8fafc; }
+        .checkbox-bounce:checked + label { animation: bounceIn 0.3s ease; color: #1e40af; font-weight: bold; }
+        @keyframes bounceIn { 0% { transform: scale(1); } 50% { transform: scale(1.05); } 100% { transform: scale(1); } }
+        .badge-pop { animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+        @keyframes popIn { from { transform: scale(0.5); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+        /* Accessibility Suite Styles */
+        #accessibility-fab {
+            position: fixed;
+            bottom: 24px;
+            left: 24px;
+            z-index: 50;
+            transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+        #accessibility-fab:hover { transform: scale(1.1); }
+        
+        #accessibility-panel {
+            position: fixed;
+            bottom: 85px;
+            left: 24px;
+            width: 320px;
+            max-height: calc(100vh - 120px);
+            background: var(--card-bg);
+            border: 2px solid var(--primary);
+            border-radius: 20px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.15);
+            z-index: 49;
+            overflow-y: auto;
+            transform: translateX(-120%);
+            transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        #accessibility-panel.open { transform: translateX(0); }
+
+        .a11y-option-card {
+            background: var(--bg-main);
+            border: 1px solid var(--card-border);
+            padding: 12px;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .a11y-option-card:hover { border-color: var(--primary); }
+        .a11y-option-card.active { border-color: var(--primary); background: var(--primary); color: white; }
+        .a11y-option-card.active span { color: white !important; }
+
+        .reading-guide {
+            position: fixed;
+            left: 0;
+            width: 100%;
+            height: 4px;
+            background: rgba(29, 78, 216, 0.5);
+            pointer-events: none;
+            z-index: 100;
+            display: none;
+        }
+
+        .large-cursor { cursor: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 3 7.07 16.97 2.51-7.39 7.39-2.51L3 3z"/><path d="m13 13 6 6"/></svg>'), auto !important; }
+
+        /* Card Variable Application */
+        .bg-white { background-color: var(--card-bg) !important; }
+        .border-slate-200 { border-color: var(--card-border) !important; }
+        .text-slate-800, .text-slate-900 { color: var(--text-main) !important; }
+        .text-slate-600, .text-slate-500 { color: var(--text-muted) !important; }
+        .bg-slate-50 { background-color: var(--bg-main) !important; }
+        
+        .match-card {
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+        }
+
+        @keyframes scanLaser {
+            0% { top: 0; opacity: 0; }
+            10% { opacity: 1; }
+            90% { opacity: 1; }
+            100% { top: 100%; opacity: 0; }
+        }
+        .laser-anim { animation: scanLaser 2s infinite ease-in-out; }
     </style>
 </head>
-<body class="bg-slate-50 text-slate-800 font-sans min-h-screen flex flex-col">
+<body class="min-h-screen flex flex-col">
 
-    <nav class="bg-blue-700 text-white shadow-md sticky top-0 z-40">
+    <nav class="bg-blue-700 text-white shadow-md sticky top-0 z-40" style="background-color: var(--primary);">
         <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
             <div class="flex items-center justify-between h-16">
                 <div class="flex items-center gap-2">
@@ -28,7 +194,7 @@
                 <div class="flex space-x-1 sm:space-x-4">
                     <button onclick="switchView('pwd-view')" class="nav-btn px-3 py-2 rounded-md text-sm font-medium transition" id="nav-pwd-view">PWD Portal</button>
                     <button onclick="switchView('employer-view')" class="nav-btn px-3 py-2 rounded-md text-sm font-medium transition" id="nav-employer-view">Employers</button>
-                    <button onclick="switchView('admin-view')" class="nav-btn px-3 py-2 rounded-md text-sm font-medium transition" id="nav-admin-view">NCDA Admin</button>
+                    <button onclick="switchView('admin-view')" class="nav-btn px-3 py-2 rounded-md text-sm font-medium transition" id="nav-admin-view">Admin</button>
                 </div>
             </div>
         </div>
@@ -43,31 +209,37 @@
                 <p class="text-slate-600">Our AI matches your specific physical capabilities with verified inclusive employers.</p>
             </div>
 
-            <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                <div class="lg:col-span-1 bg-white p-6 rounded-xl shadow-sm border border-slate-200 h-fit">
-                    <h2 class="text-xl font-semibold mb-4 border-b pb-2">Your Profile</h2>
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+                <div class="lg:col-span-4 bg-white p-6 rounded-xl shadow-sm border border-slate-200 h-fit">
+                    <div class="flex items-center justify-between mb-4 border-b pb-2">
+                        <h2 class="text-xl font-semibold">Your Profile</h2>
+                    </div>
                     <form id="pwd-form" onsubmit="handlePwdMatch(event)">
                         <div class="space-y-4">
-                            <div>
-                                <label class="block text-sm font-medium text-slate-700 mb-1">Full Name</label>
-                                <input type="text" id="pwd-name" required placeholder="e.g., Juan Dela Cruz" class="w-full p-2.5 border border-slate-300 rounded-lg outline-none">
+                            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 gap-4">
+                                <div>
+                                    <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Full Name</label>
+                                    <input type="text" id="pwd-name" required placeholder="Juan Dela Cruz" class="w-full p-2.5 border border-slate-200 rounded-lg outline-none text-sm focus:border-blue-400 bg-slate-50/50">
+                                </div>
+                                <div>
+                                    <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Professional Skills</label>
+                                    <input type="text" id="pwd-skills" required placeholder="typing, computer, communication" class="w-full p-2.5 border border-slate-200 rounded-lg outline-none text-sm focus:border-blue-400 bg-slate-50/50">
+                                </div>
                             </div>
-                            <div>
-                                <label class="block text-sm font-medium text-slate-700 mb-1">Disability Type</label>
-                                <select id="pwd-type" class="w-full p-2.5 border border-slate-300 rounded-lg outline-none bg-white">
-                                    <option value="Orthopedic">Orthopedic / Motor</option>
-                                    <option value="Visual">Visual Impairment</option>
-                                    <option value="Hearing">Hearing Impairment</option>
-                                    <option value="Psychosocial">Psychosocial</option>
-                                </select>
+
+                            <div class="space-y-2">
+                                <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest">Disabilities <span class="font-normal">(Select all that apply)</span></label>
+                                <div id="disability-checklist" class="space-y-1.5 max-h-[260px] overflow-y-auto pr-2 custom-scrollbar">
+                                    <!-- Dynamic Accordion Groups -->
+                                </div>
+                                <div id="selected-summary" class="flex flex-wrap gap-1.5 min-h-[20px]">
+                                    <!-- Selection badges -->
+                                </div>
                             </div>
+
                             <div>
-                                <label class="block text-sm font-medium text-slate-700 mb-1">Physical Capabilities</label>
-                                <textarea id="pwd-capabilities" required rows="3" placeholder="e.g., I can work 10 hours. I use a wheelchair." class="w-full p-2.5 border border-slate-300 rounded-lg outline-none resize-none"></textarea>
-                            </div>
-                            <div>
-                                <label class="block text-sm font-medium text-slate-700 mb-1">Professional Skills</label>
-                                <input type="text" id="pwd-skills" required placeholder="typing, computer, communication" class="w-full p-2.5 border border-slate-300 rounded-lg outline-none">
+                                <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Physical Capabilities</label>
+                                <textarea id="pwd-capabilities" required rows="2" placeholder="e.g., I use a wheelchair. I can lift light objects." class="w-full p-2.5 border border-slate-200 rounded-lg outline-none text-sm focus:border-blue-400 bg-slate-50/50 resize-none"></textarea>
                             </div>
                         </div>
                         <button type="submit" class="mt-6 w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 px-4 rounded-lg transition flex items-center justify-center gap-2">
@@ -76,7 +248,7 @@
                     </form>
                 </div>
 
-                <div class="lg:col-span-2">
+                <div class="lg:col-span-8">
                     <div id="loading-indicator" class="hidden flex-col items-center justify-center h-64 text-slate-500">
                         <i class="fa-solid fa-circle-notch fa-spin text-4xl text-blue-500 mb-4"></i>
                         <p>Semantic AI is analyzing physical compatibility...</p>
@@ -103,12 +275,90 @@
             <div class="bg-white p-6 sm:p-8 rounded-xl shadow-sm border border-slate-200">
                 <form id="employer-form" onsubmit="handleEmployerSubmit(event)">
                     <div class="space-y-5">
-                        <div><label class="block text-sm font-medium mb-1">Employer Name</label><input type="text" id="emp-name" required class="w-full p-2.5 border rounded-lg"></div>
-                        <div><label class="block text-sm font-medium mb-1">Job Title</label><input type="text" id="emp-title" required class="w-full p-2.5 border rounded-lg"></div>
-                        <div><label class="block text-sm font-medium mb-1">Job Description</label><textarea id="emp-desc" required rows="3" class="w-full p-2.5 border rounded-lg"></textarea></div>
-                        <div class="bg-blue-50 p-4 rounded-lg border border-blue-100">
-                            <label class="block text-sm font-bold text-blue-900 mb-1">Physical & Environmental Requirements</label>
-                            <textarea id="emp-phys" required rows="3" placeholder="e.g., Requires standing for 8 hours. Must lift 5kg." class="w-full p-2.5 border rounded-lg"></textarea>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div><label class="block text-sm font-medium mb-1 text-slate-700">Employer Name</label><input type="text" id="emp-name" required class="w-full p-2.5 border rounded-lg focus:ring-2 focus:ring-blue-100 outline-none"></div>
+                            <div>
+                                <label class="block text-sm font-medium mb-1 text-slate-700">Employer Type</label>
+                                <select id="emp-type" class="w-full p-2.5 border rounded-lg bg-white outline-none">
+                                    <option value="Private">Private Company</option>
+                                    <option value="Government">Government Agency</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div><label class="block text-sm font-medium mb-1 text-slate-700">Job Title</label><input type="text" id="emp-title" required class="w-full p-2.5 border rounded-lg outline-none"></div>
+                            <div>
+                                <label class="block text-sm font-medium mb-1 text-slate-700">Job Type</label>
+                                <select id="emp-job-type" class="w-full p-2.5 border rounded-lg bg-white outline-none">
+                                    <option value="Full-time">Full-time</option>
+                                    <option value="Part-time">Part-time</option>
+                                    <option value="Contract">Contract</option>
+                                    <option value="Remote">Remote</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div><label class="block text-sm font-medium mb-1 text-slate-700">Expected Salary (Monthly)</label><input type="text" id="emp-salary" placeholder="e.g. 25,000 - 35,000" class="w-full p-2.5 border rounded-lg outline-none"></div>
+                            <div><label class="block text-sm font-medium mb-1 text-slate-700">Location</label><input type="text" id="emp-location" placeholder="City, Region" class="w-full p-2.5 border rounded-lg outline-none"></div>
+                        </div>
+                        <div><label class="block text-sm font-medium mb-1 text-slate-700">Benefits</label><input type="text" id="emp-benefits" placeholder="e.g. HMO, 13th Month, Rice Allowance" class="w-full p-2.5 border rounded-lg outline-none"></div>
+                        
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-6 p-4 bg-slate-50 rounded-xl border border-slate-100">
+                            <div>
+                                <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Work Environment</label>
+                                <select id="emp-env" class="w-full p-2 border rounded-lg bg-white text-sm outline-none">
+                                    <option value="Indoor (Office)">Indoor (Office)</option>
+                                    <option value="Indoor (Factory/Warehouse)">Indoor (Factory/Warehouse)</option>
+                                    <option value="Outdoor">Outdoor</option>
+                                    <option value="Hybrid/Flexible">Hybrid/Flexible</option>
+                                    <option value="Other (See Description)">Other (See Description)</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Work Tempo</label>
+                                <select id="emp-tempo" class="w-full p-2 border rounded-lg bg-white text-sm outline-none">
+                                    <option value="Relaxed">Relaxed (Self-paced)</option>
+                                    <option value="Moderate">Moderate (Standard)</option>
+                                    <option value="High Pressure">High Pressure (Deadline-driven)</option>
+                                    <option value="Other (See Description)">Other (See Description)</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div>
+                            <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Accessibility Features Available</label>
+                            <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                                <label class="flex items-center gap-2 cursor-pointer group">
+                                    <input type="checkbox" value="Ramps/Elevators" class="emp-accessibility-feat w-4 h-4 rounded text-blue-600 border-slate-300">
+                                    <span class="text-xs text-slate-600 group-hover:text-blue-600 transition">Ramps/Elevators</span>
+                                </label>
+                                <label class="flex items-center gap-2 cursor-pointer group">
+                                    <input type="checkbox" value="Braille Signage" class="emp-accessibility-feat w-4 h-4 rounded text-blue-600 border-slate-300">
+                                    <span class="text-xs text-slate-600 group-hover:text-blue-600 transition">Braille Signage</span>
+                                </label>
+                                <label class="flex items-center gap-2 cursor-pointer group">
+                                    <input type="checkbox" value="Assistive Tech" class="emp-accessibility-feat w-4 h-4 rounded text-blue-600 border-slate-300">
+                                    <span class="text-xs text-slate-600 group-hover:text-blue-600 transition">Assistive Tech</span>
+                                </label>
+                                <label class="flex items-center gap-2 cursor-pointer group">
+                                    <input type="checkbox" value="Sign Language Support" class="emp-accessibility-feat w-4 h-4 rounded text-blue-600 border-slate-300">
+                                    <span class="text-xs text-slate-600 group-hover:text-blue-600 transition">Sign Language Support</span>
+                                </label>
+                                <label class="flex items-center gap-2 cursor-pointer group">
+                                    <input type="checkbox" value="Quiet Zones" class="emp-accessibility-feat w-4 h-4 rounded text-blue-600 border-slate-300">
+                                    <span class="text-xs text-slate-600 group-hover:text-blue-600 transition">Quiet Zones</span>
+                                </label>
+                                <label class="flex items-center gap-2 cursor-pointer group">
+                                    <input type="checkbox" value="Ergonomic Stations" class="emp-accessibility-feat w-4 h-4 rounded text-blue-600 border-slate-300">
+                                    <span class="text-xs text-slate-600 group-hover:text-blue-600 transition">Ergonomic Stations</span>
+                                </label>
+                            </div>
+                        </div>
+
+                        <div><label class="block text-sm font-medium mb-1 text-slate-700">Detailed Job Description</label><textarea id="emp-desc" required rows="2" class="w-full p-2.5 border rounded-lg outline-none"></textarea></div>
+                        <div class="bg-blue-50 p-4 rounded-xl border border-blue-100">
+                            <label class="block text-xs font-bold text-blue-900 mb-2 uppercase tracking-widest">Physical Safety Requirements (For AI Audit)</label>
+                            <textarea id="emp-phys" required rows="2" placeholder="e.g., Requires sitting for 8 hours. Level access only." class="w-full p-2.5 border rounded-lg outline-none"></textarea>
                         </div>
                     </div>
                     <button type="submit" class="mt-6 w-full bg-slate-800 text-white font-medium py-3 rounded-lg">Submit for Verification</button>
@@ -119,7 +369,7 @@
         <!-- NCDA ADMIN -->
         <section id="admin-view" class="view-section hidden-step fade-in">
             <div class="flex justify-between items-center mb-8">
-                <h1 class="text-3xl font-bold">NCDA Verification</h1>
+                <h1 class="text-3xl font-bold">Verification</h1>
                 <button onclick="seedDemoData()" class="bg-emerald-100 text-emerald-800 px-4 py-2 rounded-lg font-medium"><i class="fa-solid fa-database"></i> Seed Demo Jobs</button>
             </div>
             <div class="bg-white rounded-xl shadow-sm border overflow-hidden">
@@ -134,18 +384,332 @@
 
     <div id="toast-container" class="fixed bottom-4 right-4 z-50 flex flex-col gap-2"></div>
 
+    <!-- Accessibility Widget -->
+    <div id="reading-guide" class="reading-guide"></div>
+
+    <button id="accessibility-fab" onclick="toggleA11yPanel()" class="bg-blue-600 text-white w-14 h-14 rounded-full shadow-2xl flex items-center justify-center hover:bg-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-300" aria-label="Open Accessibility Menu">
+        <i class="fa-solid fa-universal-access text-2xl"></i>
+    </button>
+
+    <div id="accessibility-panel" class="p-6">
+        <div class="flex items-center justify-between mb-6">
+            <h2 class="text-xl font-bold flex items-center gap-2">
+                <i class="fa-solid fa-sliders text-blue-600"></i> Accessibility Suite
+            </h2>
+            <button onclick="toggleA11yPanel()" class="text-slate-400 hover:text-slate-600"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+
+        <!-- Themes -->
+        <div class="mb-6">
+            <p class="text-[10px] font-bold uppercase tracking-widest mb-3 opacity-60 text-slate-500">Visual Theme</p>
+            <div class="grid grid-cols-2 gap-2">
+                <button onclick="setTheme('default')" id="theme-default" class="a11y-option-card active flex flex-col items-center gap-1">
+                    <i class="fa-solid fa-sun"></i><span class="text-[10px] font-bold">Default</span>
+                </button>
+                <button onclick="setTheme('dark')" id="theme-dark" class="a11y-option-card flex flex-col items-center gap-1">
+                    <i class="fa-solid fa-moon"></i><span class="text-[10px] font-bold">Dark Mode</span>
+                </button>
+                <button onclick="setTheme('high-contrast')" id="theme-high-contrast" class="a11y-option-card flex flex-col items-center gap-1">
+                    <i class="fa-solid fa-circle-half-stroke"></i><span class="text-[10px] font-bold">Contrast</span>
+                </button>
+                <button onclick="setTheme('grayscale')" id="theme-grayscale" class="a11y-option-card flex flex-col items-center gap-1">
+                    <i class="fa-solid fa-droplet-slash"></i><span class="text-[10px] font-bold">Grayscale</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Font Scaling -->
+        <div class="mb-6">
+            <p class="text-[10px] font-bold uppercase tracking-widest mb-3 opacity-60 text-slate-500">Font Scaling</p>
+            <div class="flex items-center justify-between bg-slate-50 p-2 rounded-xl border">
+                <button onclick="changeFontSize(-0.1)" class="w-10 h-10 rounded-lg hover:bg-white flex items-center justify-center font-bold text-lg">-</button>
+                <span id="font-size-label" class="text-xs font-bold">100%</span>
+                <button onclick="changeFontSize(0.1)" class="w-10 h-10 rounded-lg hover:bg-white flex items-center justify-center font-bold text-lg">+</button>
+            </div>
+        </div>
+
+        <!-- Typography -->
+        <div class="mb-6">
+            <p class="text-[10px] font-bold uppercase tracking-widest mb-3 opacity-60 text-slate-500">Typography</p>
+            <button onclick="toggleDyslexiaFont()" id="dyslexia-btn" class="w-full a11y-option-card flex items-center justify-between">
+                <span class="text-xs font-bold">Dyslexia Friendly Font</span>
+                <i class="fa-solid fa-font"></i>
+            </button>
+        </div>
+
+        <!-- Reading Aids -->
+        <div class="mb-6">
+            <p class="text-[10px] font-bold uppercase tracking-widest mb-3 opacity-60 text-slate-500">Reading Aids</p>
+            <div class="space-y-2">
+                <button onclick="toggleReadingGuide()" id="reading-guide-btn" class="w-full a11y-option-card flex items-center justify-between">
+                    <span class="text-xs font-bold">Reading Guide Line</span>
+                    <i class="fa-solid fa-grip-lines"></i>
+                </button>
+                <button onclick="toggleLargeCursor()" id="large-cursor-btn" class="w-full a11y-option-card flex items-center justify-between">
+                    <span class="text-xs font-bold">Large Cursor</span>
+                    <i class="fa-solid fa-arrow-pointer"></i>
+                </button>
+            </div>
+        </div>
+
+        <!-- TTS -->
+        <div class="mb-6">
+            <p class="text-[10px] font-bold uppercase tracking-widest mb-3 opacity-60 text-slate-500">Audio Support (Free)</p>
+            <div class="flex gap-2">
+                <button onclick="readPageContent()" class="flex-1 bg-emerald-600 text-white p-3 rounded-xl text-xs font-bold flex items-center justify-center gap-2">
+                    <i class="fa-solid fa-volume-high"></i> Read Page
+                </button>
+                <button onclick="stopTTS()" class="bg-red-100 text-red-600 p-3 rounded-xl"><i class="fa-solid fa-stop"></i></button>
+            </div>
+            <p class="text-[9px] mt-2 text-slate-400 italic">Uses native browser voice engine.</p>
+        </div>
+
+        <button onclick="resetA11y()" class="w-full text-[10px] font-bold uppercase tracking-widest text-slate-400 hover:text-red-500 transition-colors py-2">
+            Reset to Default
+        </button>
+    </div>
+
+    <!-- OCR Processing Modal -->
+    <div id="ocr-modal" class="fixed inset-0 z-[60] hidden flex items-center justify-center bg-slate-900/80 backdrop-blur-sm p-4">
     <script>
-        const API_BASE_URL = 'http://127.0.0.1:8000/api';
-        let currentAdminTab = 'pending';
+
+        // Accessibility State
+        let a11yConfig = JSON.parse(localStorage.getItem('upliftA11y')) || {
+            theme: 'default',
+            fontScale: 1.0,
+            dyslexiaFont: false,
+            readingGuide: false,
+            largeCursor: false
+        };
+
+        function toggleA11yPanel() {
+            document.getElementById('accessibility-panel').classList.toggle('open');
+        }
+
+        function setTheme(theme) {
+            a11yConfig.theme = theme;
+            document.body.classList.remove('high-contrast', 'grayscale-theme', 'dark-mode');
+            document.querySelectorAll('.a11y-option-card[id^="theme-"]').forEach(el => el.classList.remove('active'));
+            
+            if (theme !== 'default') {
+                const themeClass = theme === 'high-contrast' ? 'high-contrast' : 
+                                   theme === 'grayscale' ? 'grayscale-theme' : 'dark-mode';
+                document.body.classList.add(themeClass);
+            }
+            document.getElementById(`theme-${theme}`).classList.add('active');
+            saveA11y();
+        }
+
+        function changeFontSize(delta) {
+            a11yConfig.fontScale = Math.min(Math.max(a11yConfig.fontScale + delta, 0.8), 1.8);
+            document.documentElement.style.setProperty('--scale-factor', a11yConfig.fontScale);
+            document.getElementById('font-size-label').innerText = `${Math.round(a11yConfig.fontScale * 100)}%`;
+            saveA11y();
+        }
+
+        function toggleDyslexiaFont() {
+            a11yConfig.dyslexiaFont = !a11yConfig.dyslexiaFont;
+            document.body.classList.toggle('dyslexia-font', a11yConfig.dyslexiaFont);
+            document.getElementById('dyslexia-btn').classList.toggle('active', a11yConfig.dyslexiaFont);
+            saveA11y();
+        }
+
+        function toggleReadingGuide() {
+            a11yConfig.readingGuide = !a11yConfig.readingGuide;
+            const guide = document.getElementById('reading-guide');
+            guide.style.display = a11yConfig.readingGuide ? 'block' : 'none';
+            document.getElementById('reading-guide-btn').classList.toggle('active', a11yConfig.readingGuide);
+            saveA11y();
+        }
+
+        function toggleLargeCursor() {
+            a11yConfig.largeCursor = !a11yConfig.largeCursor;
+            document.body.classList.toggle('large-cursor', a11yConfig.largeCursor);
+            document.getElementById('large-cursor-btn').classList.toggle('active', a11yConfig.largeCursor);
+            saveA11y();
+        }
+
+        function saveA11y() {
+            localStorage.setItem('upliftA11y', JSON.stringify(a11yConfig));
+        }
+
+        function applyA11y() {
+            setTheme(a11yConfig.theme);
+            document.documentElement.style.setProperty('--scale-factor', a11yConfig.fontScale);
+            document.getElementById('font-size-label').innerText = `${Math.round(a11yConfig.fontScale * 100)}%`;
+            if (a11yConfig.dyslexiaFont) document.body.classList.add('dyslexia-font');
+            document.getElementById('dyslexia-btn').classList.toggle('active', a11yConfig.dyslexiaFont);
+            if (a11yConfig.readingGuide) document.getElementById('reading-guide').style.display = 'block';
+            document.getElementById('reading-guide-btn').classList.toggle('active', a11yConfig.readingGuide);
+            if (a11yConfig.largeCursor) document.body.classList.add('large-cursor');
+            document.getElementById('large-cursor-btn').classList.toggle('active', a11yConfig.largeCursor);
+        }
+
+        function resetA11y() {
+            a11yConfig = { theme: 'default', fontScale: 1.0, dyslexiaFont: false, readingGuide: false, largeCursor: false };
+            applyA11y();
+            saveA11y();
+        }
+
+        // Reading Guide Follow Mouse
+        document.addEventListener('mousemove', (e) => {
+            if (a11yConfig.readingGuide) {
+                document.getElementById('reading-guide').style.top = `${e.clientY}px`;
+            }
+        });
+
+        // TTS Logic
+        let speechSynth = window.speechSynthesis;
+        let speechUtterance = null;
+
+        function readPageContent() {
+            stopTTS();
+            const textToRead = document.querySelector('main').innerText;
+            speechUtterance = new SpeechSynthesisUtterance(textToRead);
+            speechUtterance.rate = 0.9;
+            speechSynth.speak(speechUtterance);
+        }
+
+        function stopTTS() {
+            if (speechSynth.speaking) speechSynth.cancel();
+        }
+
+        // Initialize Accessibility
+        applyA11y();
+
+        const DISABILITY_DESCRIPTIONS = {
+            'Physical': 'Includes mobility impairments, orthopedic conditions, or motor-related challenges.',
+            'Visual': 'Covers blindness, low vision, or significant visual impairments.',
+            'Hearing': 'Includes deaf or hard-of-hearing conditions. Focuses on visual communication.',
+            'Learning': 'Covers neurodivergence like Autism, ADHD, or Dyslexia.',
+            'Intellectual': 'Includes Down syndrome or cognitive delays.',
+            'Psychosocial': 'Covers mental health conditions like bipolar, depression, or anxiety.',
+            'Chronic_Illness': 'Covers non-apparent health conditions like cancer or rare diseases.'
+        };
+
+        const SUB_CATEGORIES = {
+            'Physical': ['Wheelchair User', 'Amputee', 'Cerebral Palsy', 'Muscular Dystrophy', 'Chronic Pain', 'Other'],
+            'Visual': ['Total Blindness', 'Low Vision', 'Color Blindness', 'Other'],
+            'Hearing': ['Profoundly Deaf', 'Hard of Hearing', 'Auditory Processing', 'Other'],
+            'Learning': ['Autism (ASD)', 'ADHD', 'Dyslexia', 'Dysgraphia', 'Other'],
+            'Intellectual': ['Down Syndrome', 'Developmental Delay', 'Other'],
+            'Psychosocial': ['Bipolar Disorder', 'Depression', 'Anxiety Disorder', 'PTSD', 'Schizophrenia', 'Other'],
+            'Chronic_Illness': ['Cancer Patient/Survivor', 'Rare Disease', 'Speech Impairment', 'Chronic Respiratory', 'Other']
+        };
+
+        function initDisabilityChecklist() {
+            const container = document.getElementById('disability-checklist');
+            container.innerHTML = Object.keys(SUB_CATEGORIES).map(cat => `
+                <div class="border border-slate-200 rounded-lg overflow-hidden bg-white cat-card shadow-sm">
+                    <button type="button" 
+                            id="btn-${cat}"
+                            onclick="toggleCategory('${cat}')" 
+                            aria-expanded="false"
+                            aria-controls="content-${cat}"
+                            class="w-full flex items-center justify-between p-3 hover:bg-slate-50 transition-all text-left">
+                        <div class="flex items-center gap-2">
+                            <div class="w-7 h-7 rounded-md bg-blue-50 flex items-center justify-center text-blue-600 text-sm">
+                                <i class="fa-solid ${getCategoryIcon(cat)}"></i>
+                            </div>
+                            <span class="text-xs font-bold text-slate-700">${cat.replace('_', ' ')}</span>
+                        </div>
+                        <i id="icon-${cat}" class="fa-solid fa-chevron-down text-slate-300 text-[10px] transition-transform duration-300"></i>
+                    </button>
+                    <div id="content-${cat}" 
+                         role="region"
+                         aria-labelledby="btn-${cat}"
+                         class="disclosure-content">
+                        <div class="disclosure-inner p-3 pt-0 grid grid-cols-1 gap-2">
+                            ${SUB_CATEGORIES[cat].map(sub => `
+                                <div class="flex items-center gap-3 p-2 rounded-lg hover:bg-slate-50 transition-colors group">
+                                    <div class="relative flex items-center h-5">
+                                        <input type="checkbox" 
+                                               id="cb-${cat}-${sub}" 
+                                               data-category="${cat}"
+                                               data-sub="${sub}"
+                                               onchange="updateSelectedSummary()"
+                                               class="disability-checkbox w-4 h-4 text-blue-600 border-slate-300 rounded focus:ring-blue-500 cursor-pointer checkbox-bounce">
+                                    </div>
+                                    <label for="cb-${cat}-${sub}" class="text-[11px] font-medium text-slate-600 cursor-pointer group-hover:text-slate-900 transition-colors">
+                                        ${sub}
+                                    </label>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function toggleCategory(cat) {
+            const content = document.getElementById(`content-${cat}`);
+            const icon = document.getElementById(`icon-${cat}`);
+            const btn = document.getElementById(`btn-${cat}`);
+            
+            const isOpen = content.classList.contains('open');
+            
+            // Close others (Accordion style)
+            document.querySelectorAll('.disclosure-content').forEach(el => el.classList.remove('open'));
+            document.querySelectorAll('[id^="icon-"]').forEach(el => el.classList.remove('rotate-180'));
+            document.querySelectorAll('[aria-expanded]').forEach(el => el.setAttribute('aria-expanded', 'false'));
+            
+            if (!isOpen) {
+                content.classList.add('open');
+                icon.classList.add('rotate-180');
+                btn.setAttribute('aria-expanded', 'true');
+            }
+        }
+
+        function getCategoryIcon(cat) {
+            const icons = {
+                'Physical': 'fa-wheelchair',
+                'Visual': 'fa-eye',
+                'Hearing': 'fa-ear-listen',
+                'Learning': 'fa-brain',
+                'Intellectual': 'fa-user-gear',
+                'Psychosocial': 'fa-heart-pulse',
+                'Chronic_Illness': 'fa-stethoscope'
+            };
+            return icons[cat] || 'fa-notes-medical';
+        }
+
+        function updateSelectedSummary() {
+            const container = document.getElementById('selected-summary');
+            const checkboxes = document.querySelectorAll('.disability-checkbox:checked');
+            
+            if (checkboxes.length === 0) {
+                container.innerHTML = '<span class="text-[10px] text-slate-400 italic">No selection made yet</span>';
+                return [];
+            }
+
+            const checked = Array.from(checkboxes).map(cb => ({
+                category: cb.dataset.category,
+                sub: cb.dataset.sub
+            }));
+
+            container.innerHTML = checked.map(d => `
+                <span class="px-2 py-1 bg-blue-100 text-blue-700 rounded-lg text-[10px] font-bold border border-blue-200 badge-pop flex items-center gap-1">
+                    ${d.category}: ${d.sub}
+                    <button type="button" onclick="document.getElementById('cb-${d.category}-${d.sub}').click()" class="ml-1 hover:text-blue-900"><i class="fa-solid fa-xmark"></i></button>
+                </span>
+            `).join('');
+            
+            return checked;
+        }
 
         function switchView(viewId) {
+            localStorage.setItem('upliftCurrentView', viewId);
             document.querySelectorAll('.view-section').forEach(el => el.classList.add('hidden-step'));
             document.getElementById(viewId).classList.remove('hidden-step');
             document.querySelectorAll('.nav-btn').forEach(el => el.classList.remove('bg-blue-800'));
-            document.getElementById('nav-' + viewId).classList.add('bg-blue-800');
+            const navBtn = document.getElementById('nav-' + viewId);
+            if(navBtn) navBtn.classList.add('bg-blue-800');
             if(viewId === 'admin-view') fetchAdminJobs(currentAdminTab);
         }
-        switchView('pwd-view');
+        
+        // Restore session view
+        const savedView = localStorage.getItem('upliftCurrentView') || 'pwd-view';
+        switchView(savedView);
 
         function showToast(message, type = 'success') {
             const container = document.getElementById('toast-container');
@@ -160,9 +724,23 @@
 
         async function handleEmployerSubmit(e) {
             e.preventDefault();
-            const payload = { employer_name: document.getElementById('emp-name').value, job_title: document.getElementById('emp-title').value, job_description: document.getElementById('emp-desc').value, physical_requirements: document.getElementById('emp-phys').value };
+            const accessibilityFeatures = Array.from(document.querySelectorAll('.emp-accessibility-feat:checked')).map(cb => cb.value).join(', ');
+            const payload = { 
+                employer_name: document.getElementById('emp-name').value, 
+                employer_type: document.getElementById('emp-type').value,
+                job_title: document.getElementById('emp-title').value, 
+                job_type: document.getElementById('emp-job-type').value,
+                salary_range: document.getElementById('emp-salary').value,
+                location: document.getElementById('emp-location').value,
+                benefits: document.getElementById('emp-benefits').value,
+                accessibility_features: accessibilityFeatures,
+                work_environment: document.getElementById('emp-env').value,
+                work_tempo: document.getElementById('emp-tempo').value,
+                job_description: document.getElementById('emp-desc').value, 
+                physical_requirements: document.getElementById('emp-phys').value 
+            };
             const res = await fetch(`${API_BASE_URL}/employer/submit-job`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-            if(res.ok) { showToast('Job submitted!'); document.getElementById('employer-form').reset(); }
+            if(res.ok) { showToast('Job submitted for verification!'); document.getElementById('employer-form').reset(); }
         }
 
         async function fetchAdminJobs(status) {
@@ -174,15 +752,104 @@
             const container = document.getElementById('admin-jobs-list');
             if (data.jobs.length === 0) { container.innerHTML = '<p class="text-center py-8">No jobs found.</p>'; return; }
             container.innerHTML = data.jobs.map(job => `
-                <div class="border p-4 rounded-lg bg-white flex justify-between items-center">
-                    <div><h3 class="font-bold">${job.job_title}</h3><p class="text-sm text-slate-600">${job.physical_requirements}</p></div>
-                    ${status === 'pending' ? `<button onclick="approveJob('${job.id}')" class="bg-blue-600 text-white px-4 py-2 rounded">Approve</button>` : `<span class="bg-emerald-100 px-3 py-1 rounded text-emerald-800">Vectorized</span>`}
+                <div class="border border-slate-200 rounded-xl p-6 bg-white hover:border-blue-200 transition-all shadow-sm">
+                    <div class="flex flex-col md:flex-row justify-between gap-6">
+                        <div class="flex-1">
+                            <div class="flex items-center gap-3 mb-2">
+                                <h3 class="text-lg font-bold text-slate-900">${job.job_title}</h3>
+                                <span class="${(job.employer_type || 'Private') === 'Government' ? 'bg-emerald-50 text-emerald-700 border-emerald-100' : 'bg-slate-50 text-slate-600 border-slate-100'} px-2 py-0.5 rounded text-[10px] font-bold uppercase border">${job.employer_type || 'Private'}</span>
+                            </div>
+                            
+                            <div class="grid grid-cols-2 sm:grid-cols-3 gap-4 mb-4 text-xs">
+                                <div>
+                                    <p class="text-slate-400 font-bold uppercase tracking-widest text-[9px]">Employer</p>
+                                    <p class="font-semibold text-blue-600">${job.employer_name}</p>
+                                </div>
+                                <div>
+                                    <p class="text-slate-400 font-bold uppercase tracking-widest text-[9px]">Compensation</p>
+                                    <p class="font-semibold text-slate-700">₱${job.salary_range || 'Negotiable'}</p>
+                                </div>
+                                <div>
+                                    <p class="text-slate-400 font-bold uppercase tracking-widest text-[9px]">Location</p>
+                                    <p class="font-semibold text-slate-700">${job.location || 'Remote/PH'}</p>
+                                </div>
+                            </div>
+
+                            <div class="space-y-3">
+                                <div class="bg-slate-50 p-3 rounded-lg border border-slate-100">
+                                    <p class="text-[9px] font-bold text-slate-400 uppercase mb-1">Workplace Safety & Accessibility</p>
+                                    <p class="text-xs text-slate-600 leading-relaxed">${job.physical_requirements}</p>
+                                </div>
+                                <div class="bg-indigo-50/30 p-3 rounded-lg border border-indigo-100/50">
+                                    <p class="text-[9px] font-bold text-indigo-400 uppercase mb-1">Deep Context: Accessibility & Environment</p>
+                                    <div class="flex flex-wrap gap-2 mt-1">
+                                        <span class="text-[10px] bg-white border border-indigo-200 px-2 py-0.5 rounded text-indigo-700 font-medium">${job.work_environment || 'Indoor'}</span>
+                                        <span class="text-[10px] bg-white border border-indigo-200 px-2 py-0.5 rounded text-indigo-700 font-medium">${job.work_tempo || 'Moderate'} Tempo</span>
+                                        ${(job.accessibility_features || '').split(',').filter(f => f.trim()).map(f => `
+                                            <span class="text-[10px] bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded text-emerald-700 font-bold"><i class="fa-solid fa-universal-access mr-1"></i> ${f.trim()}</span>
+                                        `).join('')}
+                                    </div>
+                                </div>
+                                <div class="bg-slate-50/50 p-3 rounded-lg border border-slate-100">
+                                    <p class="text-[9px] font-bold text-slate-400 uppercase mb-1">Standard Benefits</p>
+                                    <p class="text-xs text-slate-600 italic">${job.benefits || 'No specific benefits listed'}</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="md:w-48 flex flex-col gap-2 justify-center border-l md:pl-6 border-slate-100">
+                            ${status === 'pending' ? `
+                                <button onclick="approveJob('${job.id}', this)" class="w-full bg-blue-600 text-white font-bold py-2.5 rounded-lg hover:bg-blue-700 transition flex items-center justify-center gap-2 text-sm">
+                                    <i class="fa-solid fa-check-circle"></i> Approve
+                                </button>
+                                <button onclick="deleteJob('${job.id}')" class="w-full bg-white text-red-600 border border-red-100 font-bold py-2.5 rounded-lg hover:bg-red-50 transition flex items-center justify-center gap-2 text-sm">
+                                    <i class="fa-solid fa-ban"></i> Reject
+                                </button>
+                            ` : `
+                                <div class="text-center p-4 bg-emerald-50 rounded-xl border border-emerald-100">
+                                    <i class="fa-solid fa-circle-check text-emerald-500 text-2xl mb-1"></i>
+                                    <p class="text-[10px] font-bold text-emerald-700 uppercase">Live in Engine</p>
+                                </div>
+                                <button onclick="deleteJob('${job.id}')" class="w-full mt-2 text-slate-400 hover:text-red-600 transition text-[10px] font-bold uppercase">
+                                    Remove Job
+                                </button>
+                            `}
+                        </div>
+                    </div>
                 </div>`).join('');
         }
 
-        async function approveJob(jobId) {
-            await fetch(`${API_BASE_URL}/admin/approve-job/${jobId}`, { method: 'POST' });
-            showToast('Job Approved!'); fetchAdminJobs('pending');
+        async function approveJob(jobId, btn) {
+            const card = btn.closest('.border');
+            btn.disabled = true;
+            const originalHtml = btn.innerHTML;
+            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Vectorizing...';
+            card.classList.add('processing-pulse', 'pointer-events-none');
+            
+            try {
+                const res = await fetch(`${API_BASE_URL}/admin/approve-job/${jobId}`, { method: 'POST' });
+                if(res.ok) {
+                    card.classList.add('admin-card-exit');
+                    showToast('Job Approved & Vectorized!');
+                    setTimeout(() => fetchAdminJobs('pending'), 400);
+                } else {
+                    throw new Error('Failed');
+                }
+            } catch (e) {
+                showToast('Approval failed', 'error');
+                btn.disabled = false;
+                btn.innerHTML = originalHtml;
+                card.classList.remove('processing-pulse', 'pointer-events-none');
+            }
+        }
+
+        async function deleteJob(jobId) {
+            if(!confirm('Are you sure you want to remove this job?')) return;
+            const res = await fetch(`${API_BASE_URL}/admin/delete-job/${jobId}`, { method: 'DELETE' });
+            if(res.ok) {
+                showToast('Job removed from engine.', 'error');
+                fetchAdminJobs(currentAdminTab);
+            }
         }
 
         async function seedDemoData() {
@@ -198,9 +865,15 @@
             document.getElementById('loading-indicator').classList.remove('hidden');
             document.getElementById('loading-indicator').classList.add('flex');
 
+            const selected = updateSelectedSummary();
+            if (selected.length === 0) {
+                showToast('Please select at least one disability', 'error');
+                return;
+            }
+
             const payload = {
                 name: document.getElementById('pwd-name').value,
-                disability_type: document.getElementById('pwd-type').value,
+                disability_types: selected,
                 physical_capabilities: document.getElementById('pwd-capabilities').value,
                 skills: document.getElementById('pwd-skills').value
             };
@@ -221,45 +894,124 @@
             document.getElementById('match-count').innerText = `${data.total_safe_matches} Safe Jobs Found`;
             
             if(data.total_safe_matches === 0) {
-                container.innerHTML = `<div class="p-8 text-center bg-white border rounded-xl">No safe matches found above 60%.</div>`; return;
+                container.innerHTML = `<div class="p-8 text-center bg-white border rounded-xl">No safe matches found above 40%.</div>`; return;
             }
 
-            container.innerHTML = data.matches.map(match => `
-                <div class="bg-white border border-slate-200 rounded-xl p-5 hover:shadow-lg transition">
-                    <div class="flex flex-col sm:flex-row justify-between gap-6">
+            container.innerHTML = data.matches.map((match, idx) => {
+                const safety = match.metrics.safety_score;
+                const safetyClass = safety >= 80 ? 'safety-badge-high' : safety > 50 ? 'safety-badge-med' : 'safety-badge-low';
+                const safetyIcon = safety >= 80 ? 'fa-shield-check' : safety > 50 ? 'fa-shield-halved' : 'fa-triangle-exclamation';
+                const safetyLabel = safety >= 80 ? 'High Safety' : safety > 50 ? 'Moderate Safety' : 'Warning: Review Required';
+                
+                return `
+                <div class="match-card rounded-2xl p-6 mb-4 animate-in slide-in-from-bottom duration-500" style="animation-delay: ${idx * 100}ms">
+                    <div class="flex flex-col md:flex-row justify-between gap-6">
                         <div class="flex-1">
-                            <h3 class="text-xl font-bold text-slate-800">${match.job_title} <span class="text-sm font-normal text-blue-700 ml-2">@ ${match.employer}</span></h3>
-                            
-                            <div class="mt-3 mb-4">
-                                <p class="text-xs font-bold text-slate-500 uppercase">Physical Requirements</p>
-                                <p class="text-sm text-slate-700">${match.physical_requirements}</p>
+                            <div class="flex items-center gap-2 mb-1">
+                                <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase ${safetyClass} flex items-center gap-1 ${safety <= 50 ? 'animate-pulse' : ''}">
+                                    <i class="fa-solid ${safetyIcon}"></i> ${safetyLabel}
+                                </span>
+                                <span class="text-[10px] text-slate-400 font-bold uppercase tracking-widest">• ${match.employer_type}</span>
                             </div>
+                            <h3 class="text-xl font-black text-slate-900 mb-1 leading-tight">${match.job_title}</h3>
+                            <p class="text-sm font-bold text-blue-600 mb-3">${match.employer}</p>
                             
-                            <!-- THIS IS THE NEW DETAILED AI INSIGHTS BOX -->
-                            <div class="bg-blue-50 border border-blue-100 rounded-lg p-4 mb-4">
-                                <p class="text-xs font-bold text-blue-900 uppercase tracking-wider mb-2"><i class="fa-solid fa-wand-magic-sparkles mr-1"></i> AI Suitability Analysis</p>
-                                <ul class="space-y-1.5">
-                                    ${match.ai_insights.map(insight => `<li class="text-sm text-blue-800 flex items-start"><i class="fa-solid fa-check text-emerald-500 mt-1 mr-2 text-xs"></i> <span>${insight}</span></li>`).join('')}
-                                </ul>
-                            </div>
-                            
-                            <div class="flex flex-wrap gap-2">
-                                <span class="text-xs font-bold text-slate-500 uppercase self-center">Matched Skills:</span>
-                                ${match.matched_skills.map(s => `<span class="bg-slate-200 text-slate-700 px-2 py-1 rounded text-xs">${s}</span>`).join('')}
+                            <div class="flex items-center gap-4 text-[11px] text-slate-500 font-medium">
+                                <span><i class="fa-solid fa-location-dot mr-1"></i> ${match.location}</span>
+                                <span><i class="fa-solid fa-clock mr-1"></i> ${match.job_type}</span>
+                                <span><i class="fa-solid fa-money-bill-wave mr-1 text-emerald-500"></i> ₱${match.salary_range}</span>
                             </div>
                         </div>
 
-                        <div class="sm:w-48 shrink-0 flex flex-col items-center bg-slate-50 rounded-xl p-4 border">
-                            <div class="w-24 h-24 rounded-full ring-4 ${match.metrics.final_accessibility_percentage >= 80 ? 'ring-emerald-500' : 'ring-blue-500'} flex items-center justify-center bg-white mb-2">
-                                <span class="text-2xl font-black ${match.metrics.final_accessibility_percentage >= 80 ? 'text-emerald-600' : 'text-blue-600'}">${match.metrics.final_accessibility_percentage}%</span>
+                        <div class="flex items-center gap-6">
+                            <div class="text-center px-4 py-2 bg-slate-50 rounded-xl border border-slate-100">
+                                <p class="text-[9px] font-black text-slate-400 uppercase tracking-tighter">Suitability</p>
+                                <p class="text-2xl font-black ${match.metrics.final_accessibility_percentage >= 80 ? 'text-emerald-600' : 'text-blue-600'}">${Math.round(match.metrics.final_accessibility_percentage)}%</p>
                             </div>
-                            <p class="text-[10px] font-bold text-slate-500 uppercase">Semantic: ${match.metrics.semantic_score}%</p>
-                            <p class="text-[10px] font-bold text-slate-500 uppercase">Keyword: ${match.metrics.keyword_score}%</p>
+                            <button onclick="toggleMatchDetails('match-${match.job_id}', this)" class="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center hover:bg-blue-600 hover:text-white transition-all transform active:scale-95 group" title="Toggle Detailed Report">
+                                <i class="fa-solid fa-chevron-down transition-transform"></i>
+                            </button>
                         </div>
                     </div>
-                </div>
-            `).join('');
+
+                    <!-- AI MATCH TEASER (Low Cognitive Load) -->
+                    <div class="mt-4 pt-4 border-t border-slate-100 flex items-center justify-between">
+                        <p class="text-xs text-slate-600 italic leading-relaxed flex-1">
+                            <i class="fa-solid fa-robot mr-2 text-blue-400"></i>
+                            ${(match.ai_insights[0] || 'Analyzing your fit...').split('.')[0]}.
+                        </p>
+                        <button onclick="showToast('Application sent to ${match.employer}!')" class="ml-4 bg-blue-600 hover:bg-blue-700 text-white px-4 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-2">
+                            Apply Now
+                        </button>
+                    </div>
+
+                    <!-- PROGRESSIVE DISCLOSURE CONTENT -->
+                    <div id="match-${match.job_id}" class="disclosure-content">
+                        <div class="disclosure-inner space-y-6">
+                            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                <div class="p-3 bg-emerald-50 rounded-xl border border-emerald-100">
+                                    <p class="text-[9px] font-black text-emerald-800 uppercase mb-2">Operational Strengths</p>
+                                    <ul class="text-[11px] text-emerald-700 space-y-1.5">
+                                        ${(match.strengths || []).map(s => `<li><i class="fa-solid fa-check-circle mr-2 opacity-70"></i> ${s}</li>`).join('')}
+                                    </ul>
+                                </div>
+                                <div class="p-3 bg-red-50 rounded-xl border border-red-100">
+                                    <p class="text-[9px] font-black text-red-800 uppercase mb-2">Identified Barriers</p>
+                                    <ul class="text-[11px] text-red-700 space-y-1.5">
+                                        ${(match.barriers || []).map(b => `<li><i class="fa-solid fa-circle-exclamation mr-2 opacity-70"></i> ${b}</li>`).join('')}
+                                    </ul>
+                                </div>
+                                <div class="p-3 bg-blue-50 rounded-xl border border-blue-100">
+                                    <p class="text-[9px] font-black text-blue-800 uppercase mb-2">Job Benefits</p>
+                                    <div class="flex flex-wrap gap-1.5">
+                                        ${(match.benefits || '').split(',').filter(b => b.trim()).map(b => `
+                                            <span class="px-2 py-1 bg-white rounded-lg text-[10px] font-bold text-blue-700 border border-blue-100">${b.trim()}</span>
+                                        `).join('')}
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="bg-slate-900 rounded-2xl p-5 text-white shadow-xl">
+                                <div class="flex items-center gap-2 mb-4 opacity-80">
+                                    <i class="fa-solid fa-file-medical text-blue-400"></i>
+                                    <span class="text-[10px] font-bold uppercase tracking-widest">Expert Suitability Report</span>
+                                </div>
+                                <div class="space-y-4">
+                                    ${(match.ai_insights || []).map((insight, i) => `
+                                        <div class="flex gap-4">
+                                            <span class="text-blue-400 font-black text-sm">0${i+1}</span>
+                                            <p class="text-xs leading-relaxed text-slate-300 font-medium">${insight}</p>
+                                        </div>
+                                    `).join('')}
+                                </div>
+                                <div class="mt-4 pt-4 border-t border-slate-700 flex justify-between items-center text-[9px] opacity-50 font-mono">
+                                    <span>REF: UPLIFT-AI-${match.job_id.substring(0,8)}</span>
+                                    <span>VERIFIED SAFE WORKPLACE</span>
+                                </div>
+                            </div>
+                            
+                            <div class="p-4 bg-slate-50 rounded-xl border border-slate-200">
+                                <p class="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">Environmental Summary</p>
+                                <p class="text-xs text-slate-600 leading-relaxed">${match.physical_requirements}</p>
+                            </div>
+
+                            <div class="flex flex-wrap gap-2 pt-2">
+                                <span class="text-[10px] font-black text-slate-400 uppercase tracking-widest self-center mr-2">Skill Alignment:</span>
+                                ${(match.matched_skills || []).map(s => `<span class="bg-slate-100 text-slate-600 px-2 py-1 rounded-lg text-[10px] font-bold border border-slate-200">${s}</span>`).join('')}
+                            </div>
+                        </div>
+                    </div>
+                </div>`;
+            }).join('');
         }
+
+        function toggleMatchDetails(id, btn) {
+            const content = document.getElementById(id);
+            const icon = btn.querySelector('i');
+            content.classList.toggle('open');
+            icon.classList.toggle('rotate-180');
+        }
+        initDisabilityChecklist();
     </script>
 </body>
 </html>
