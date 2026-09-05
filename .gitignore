@@ -1,6 +1,4 @@
 .venv
-.venv/*
-uplift_prototype.db
-__pycache__/
-*.
+__pycache__
 model_cache
+.env

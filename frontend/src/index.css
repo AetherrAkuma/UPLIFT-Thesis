@@ -1,0 +1,170 @@
+@import "tailwindcss";
+
+html {
+  scroll-behavior: smooth;
+}
+
+:root {
+  font-family: 'Inter', system-ui, Avenir, Helvetica, Arial, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+
+  /* Theme Variables - Default (Light) */
+  --bg-main: #f8fafc;
+  --bg-card: #ffffff;
+  --bg-sidebar: #ffffff;
+  --text-main: #1e293b;
+  --text-muted: #64748b;
+  --border-main: #e2e8f0;
+  --accent-main: #0038A8;
+
+  /* NCDA Theme Colors */
+  --ncda-blue: #0038A8;
+  --ncda-red: #CE1126;
+  --ncda-white: #FFFFFF;
+  --ncda-blue-light: #e6ebf6;
+  --ncda-red-light: #fef2f2;
+  
+  --scale-factor: 1;
+}
+
+/* Dark Mode Variable Overrides */
+.dark-mode {
+  --bg-main: #020617;
+  --bg-card: #0f172a;
+  --bg-sidebar: #1e293b;
+  --text-main: #f1f5f9;
+  --text-muted: #94a3b8;
+  --border-main: #334155;
+}
+
+/* High Contrast Variable Overrides */
+.high-contrast {
+  --bg-main: #000000;
+  --bg-card: #000000;
+  --bg-sidebar: #000000;
+  --text-main: #00ff00;
+  --text-muted: #00ff00;
+  --border-main: #00ff00;
+  --accent-main: #00ff00;
+}
+
+/* Base Styles */
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  background-color: var(--bg-main);
+  color: var(--text-main);
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* Global Overrides for Tailwind Components to use Variables */
+.bg-white { background-color: var(--bg-card) !important; }
+.bg-slate-50 { background-color: var(--bg-main) !important; }
+.bg-slate-100 { background-color: var(--border-main) !important; }
+.text-slate-900, .text-slate-800, .text-slate-700 { color: var(--text-main) !important; }
+.text-slate-500, .text-slate-400 { color: var(--text-muted) !important; }
+.border-slate-100, .border-slate-200 { border-color: var(--border-main) !important; }
+
+/* Accessibility Features */
+.grayscale-theme {
+    filter: grayscale(100%) !important;
+}
+
+.dyslexia-font {
+    font-family: 'OpenDyslexic', sans-serif !important;
+}
+
+.large-cursor {
+    cursor: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" fill="black" stroke="white" stroke-width="2"><path d="M3 3l7.07 16.97 2.51-7.39 7.39-2.51L3 3z"/></svg>'), auto !important;
+}
+
+.reading-guide {
+    position: fixed;
+    left: 0;
+    width: 100%;
+    height: 4px;
+    background-color: rgba(59, 130, 246, 0.5);
+    pointer-events: none;
+    z-index: 9999;
+    box-shadow: 0 0 15px rgba(59, 130, 246, 0.8);
+}
+
+/* Accessibility scale factor */
+html {
+    font-size: calc(16px * var(--scale-factor));
+}
+
+/* Skip to content link */
+.skip-to-content {
+    position: absolute;
+    top: -100%;
+    left: 0;
+    z-index: 10000;
+    padding: 12px 24px;
+    background: #0038A8;
+    color: white;
+    font-weight: 700;
+    font-size: 14px;
+    text-decoration: none;
+    border-radius: 0 0 8px 0;
+    transition: top 0.15s ease;
+}
+.skip-to-content:focus {
+    top: 0;
+}
+
+/* Reduced motion — disable ALL animations */
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
+}
+
+/* Visible focus indicators */
+:focus-visible {
+    outline: 2px solid #0038A8 !important;
+    outline-offset: 2px !important;
+    border-radius: 4px;
+}
+/* Remove default focus outlines on mouse clicks (keep for keyboard) */
+:focus:not(:focus-visible) {
+    outline: none !important;
+}
+
+/* Animations */
+.fade-in {
+    animation: fadeIn 0.5s ease-out forwards;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* Custom Scrollbar */
+.custom-scrollbar::-webkit-scrollbar {
+    width: 6px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+    background: #e2e8f0;
+    border-radius: 10px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: #cbd5e1;
+}
