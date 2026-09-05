@@ -1,4 +1,33 @@
-.venv
-__pycache__
-model_cache
+# Python & Virtual Environments
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# Environment Variables & Secrets (Local machine credentials)
 .env
+.env.local
+.env.*.local
+
+# ML Models & Caches
+model_cache/
+.cache/
+
+# Generated Outputs & Resumes
+rendercv_output/
+*.log
+
+# Frontend & Dependencies
+node_modules/
+frontend/node_modules/
+dist/
+frontend/dist/
+
+# OS & Editor Artifacts
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
