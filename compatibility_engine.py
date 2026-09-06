@@ -10,6 +10,16 @@ levels dimension-by-dimension and produces factual, auditable reasons.
 
 This structurally eliminates the "finger amputee vs whole-arm amputee" bias:
 both are reduced to capability levels, and only the levels gate matching.
+
+NCDA Compliance:
+    Disability categories align with NCDA Administrative Order No. 001,
+    Series of 2021 — the 11 primary disability types for PWD ID issuance
+    relative to Republic Acts 9442, 10754, 11215, 10747.
+
+ICF Integration:
+    Capability dimensions are mapped to the International Classification
+    of Functioning, Disability and Health (ICF) body function codes and
+    activity/participation domains for international regulatory alignment.
 """
 import json
 import re
@@ -37,6 +47,74 @@ DIMENSION_LABELS = {
     "auditory": "auditory demand",
     "tempo": "work tempo",
     "intensity": "task intensity",
+}
+
+# ICF-aligned dimension mappings (ICF: International Classification of Functioning, Disability and Health)
+# Maps UPLIFT capability dimensions to ICF body function codes and activity/participation domains.
+ICF_DIMENSION_MAP = {
+    "fine_motor": {
+        "icf_code": "b760",
+        "icf_name": "Control of voluntary movement functions",
+        "icf_domain": "Body Functions",
+        "related_codes": ["b730", "b740", "d440"],
+        "description": "Fine motor control, manual dexterity, and manipulation of objects",
+    },
+    "physical": {
+        "icf_code": "b730",
+        "icf_name": "Muscle power functions",
+        "icf_domain": "Body Functions",
+        "related_codes": ["b710", "b715", "b720", "d430", "d450"],
+        "description": "Physical strength, mobility, lifting, standing, and walking capacity",
+    },
+    "cognitive": {
+        "icf_code": "b140",
+        "icf_name": "Attention functions",
+        "icf_domain": "Body Functions",
+        "related_codes": ["b110", "b144", "b160", "b164", "d160", "d210"],
+        "description": "Cognitive capacity including attention, memory, and executive function",
+    },
+    "sensory": {
+        "icf_code": "b250",
+        "icf_name": "Taste function",
+        "icf_domain": "Body Functions",
+        "related_codes": ["b260", "b270", "b280"],
+        "description": "Sensory comfort including environmental lighting and sound tolerance",
+    },
+    "social": {
+        "icf_code": "d710",
+        "icf_name": "Basic interpersonal interactions",
+        "icf_domain": "Activities and Participation",
+        "related_codes": ["d720", "d730", "d910"],
+        "description": "Social interaction and interpersonal communication capacity",
+    },
+    "visual": {
+        "icf_code": "b210",
+        "icf_name": "Seeing functions",
+        "icf_domain": "Body Functions",
+        "related_codes": ["b211", "b212", "b213", "d110", "d112"],
+        "description": "Visual acuity, field of vision, and screen-based visual demand",
+    },
+    "auditory": {
+        "icf_code": "b230",
+        "icf_name": "Hearing functions",
+        "icf_domain": "Body Functions",
+        "related_codes": ["b235", "d115", "d310", "d315"],
+        "description": "Auditory comprehension, hearing thresholds, and verbal communication",
+    },
+    "tempo": {
+        "icf_code": "b130",
+        "icf_name": "Energy and drive functions",
+        "icf_domain": "Body Functions",
+        "related_codes": ["b134", "b140", "d210", "d220"],
+        "description": "Work pace, stamina, and sustained operational tempo capacity",
+    },
+    "intensity": {
+        "icf_code": "d160",
+        "icf_name": "Focusing attention",
+        "icf_domain": "Activities and Participation",
+        "related_codes": ["d210", "d220", "d230"],
+        "description": "Concurrent task intensity and multi-tasking capacity",
+    },
 }
 
 # Plain-language equivalents so the UI can explain findings in human words,
@@ -76,41 +154,13 @@ CAPABILITY_PRESETS = {
             fine="Medium", physical="Low", energy="Low", intensity="Low",
             acc=["Wheelchair-accessible office", "Level floor access", "Accessible parking",
                  "Adjustable-height desk", "Automatic doors"]),
-        "Amputee": {
-            "Finger(s)": _cap(
-                fine="High", physical="Medium", energy="Medium",
-                acc=["Ergonomic keyboard", "Wrist support", "Adaptive mouse"]),
-            "Hand": _cap(
-                fine="Low", physical="Medium",
-                acc=["One-hand keyboard", "Voice input (Dragon/TalkBack)",
-                     "Speech-to-text software", "Foot pedal mouse"]),
-            "Forearm": _cap(
-                fine="Low", physical="Low",
-                acc=["One-hand keyboard", "Voice input", "Prosthetic support", "Ergonomic setup"]),
-            "Upper Arm": _cap(
-                fine="Low", physical="Low",
-                acc=["Voice input", "Head-tracking pointer", "Speech-to-text software",
-                     "Prosthetic support"]),
-            "Leg(s)": _cap(
-                fine="Medium", physical="Low", energy="Low",
-                acc=["Wheelchair-accessible office", "Seated workstation", "Accessible restrooms"]),
-            "Toe(s)": _cap(
-                fine="Medium", physical="Medium",
-                acc=["Adjustable-height desk", "Custom foot support"]),
-            "Other": _cap(fine="Medium", physical="Low", energy="Low"),
-        },
-        "Cerebral Palsy": _cap(
-            fine="Medium", physical="Low", energy="Low",
-            acc=["Speech-to-text software", "Ergonomic seating", "Flexible breaks",
-                 "Quiet workspace"]),
-        "Muscular Dystrophy": _cap(
-            fine="Medium", physical="Low", energy="Low",
-            acc=["Power-assist equipment", "Flexible schedule", "Seated workstation",
-                 "Fatigue management breaks"]),
         "Chronic Pain": _cap(
             fine="Medium", physical="Low", energy="Low",
             acc=["Ergonomic workstation", "Standing/sitting desk", "Flexible breaks",
                  "Pain-management breaks"]),
+        "Neurological Condition": _cap(
+            fine="Medium", physical="Low", energy="Low",
+            acc=["Ergonomic seating", "Flexible breaks", "Quiet workspace"]),
         "Other": _cap(fine="Medium", physical="Low", energy="Medium"),
     },
     "Visual": {
@@ -171,22 +221,18 @@ CAPABILITY_PRESETS = {
         "Other": _cap(cognitive="Low"),
     },
     "Psychosocial": {
-        "Bipolar Disorder": _cap(
-            cognitive="Medium", social="Medium", energy="Medium",
-            acc=["Flexible schedule", "Predictable workload", "Supportive supervision",
-                 "Wellness breaks"]),
-        "Depression": _cap(
-            cognitive="Medium", social="Medium", energy="Low",
-            acc=["Flexible schedule", "Clear priorities", "Supportive communication"]),
         "Anxiety Disorder": _cap(
             cognitive="Medium", sensory="Low", social="Low",
             acc=["Quiet workspace", "Clear expectations", "Predictable routines"]),
         "PTSD": _cap(
             cognitive="Medium", sensory="Low", social="Low",
             acc=["Quiet workspace", "Predictable schedules", "Supportive environment"]),
-        "Schizophrenia": _cap(
-            cognitive="Medium", sensory="Low", social="Low",
-            acc=["Structured routines", "Low-stimulation environment", "Supportive supervision"]),
+        "Personality Disorder": _cap(
+            cognitive="Medium", social="Medium",
+            acc=["Clear communication protocols", "Structured routines", "Supportive supervision"]),
+        "Adjustment Disorder": _cap(
+            cognitive="Medium", social="Medium", energy="Medium",
+            acc=["Flexible schedule", "Supportive supervision", "Wellness breaks"]),
         "Other": _cap(cognitive="Medium", social="Medium"),
     },
     "Chronic_Illness": {
@@ -204,9 +250,126 @@ CAPABILITY_PRESETS = {
             acc=["Air-purified workspace", "Flexible breaks", "Reduced physical exertion"]),
         "Other": _cap(energy="Low"),
     },
+    # NCDA AO No. 001, Series of 2021 — Primary Disability Types
+    "Mental": {
+        "Bipolar Disorder": _cap(
+            cognitive="Medium", social="Medium", energy="Medium",
+            acc=["Flexible schedule", "Predictable workload", "Supportive supervision",
+                 "Wellness breaks"]),
+        "Schizophrenia": _cap(
+            cognitive="Medium", sensory="Low", social="Low",
+            acc=["Structured routines", "Low-stimulation environment", "Supportive supervision"]),
+        "Major Depression": _cap(
+            cognitive="Medium", social="Medium", energy="Low",
+            acc=["Flexible schedule", "Clear priorities", "Supportive communication"]),
+        "Other": _cap(cognitive="Medium", social="Medium"),
+    },
+    "Orthopedic": {
+        "Spinal Cord Injury": _cap(
+            fine="Medium", physical="Low", energy="Low", intensity="Low",
+            acc=["Wheelchair-accessible office", "Level floor access", "Accessible parking",
+                 "Adjustable-height desk", "Accessible restroom"]),
+        "Cerebral Palsy": _cap(
+            fine="Medium", physical="Low", energy="Low",
+            acc=["Speech-to-text software", "Ergonomic seating", "Flexible breaks",
+                 "Quiet workspace"]),
+        "Muscular Dystrophy": _cap(
+            fine="Medium", physical="Low", energy="Low",
+            acc=["Power-assist equipment", "Flexible schedule", "Seated workstation",
+                 "Fatigue management breaks"]),
+        "Polio/Post-Polio Syndrome": _cap(
+            fine="Medium", physical="Low", energy="Low",
+            acc=["Wheelchair-accessible office", "Seated workstation", "Accessible restrooms"]),
+        "Amputee": {
+            "Finger(s)": _cap(
+                fine="High", physical="Medium", energy="Medium",
+                acc=["Ergonomic keyboard", "Wrist support", "Adaptive mouse"]),
+            "Hand": _cap(
+                fine="Low", physical="Medium",
+                acc=["One-hand keyboard", "Voice input (Dragon/TalkBack)",
+                     "Speech-to-text software", "Foot pedal mouse"]),
+            "Forearm": _cap(
+                fine="Low", physical="Low",
+                acc=["One-hand keyboard", "Voice input", "Prosthetic support", "Ergonomic setup"]),
+            "Upper Arm": _cap(
+                fine="Low", physical="Low",
+                acc=["Voice input", "Head-tracking pointer", "Speech-to-text software",
+                     "Prosthetic support"]),
+            "Leg(s)": _cap(
+                fine="Medium", physical="Low", energy="Low",
+                acc=["Wheelchair-accessible office", "Seated workstation", "Accessible restrooms"]),
+            "Toe(s)": _cap(
+                fine="Medium", physical="Medium",
+                acc=["Adjustable-height desk", "Custom foot support"]),
+            "Other": _cap(fine="Medium", physical="Low", energy="Low"),
+        },
+        "Scoliosis/Kyphosis": _cap(
+            fine="Medium", physical="Low", energy="Low",
+            acc=["Ergonomic seating", "Adjustable-height desk", "Flexible breaks"]),
+        "Other": _cap(physical="Low", energy="Low"),
+    },
+    "Speech and Language Impairment": {
+        "Stuttering/Fluency Disorder": _cap(
+            fine="Medium", social="Medium",
+            acc=["Written communication", "Text-based tools", "Email-first workflows",
+                 "Speech therapy support"]),
+        "Aphasia": _cap(
+            fine="Medium", cognitive="Medium", social="Medium",
+            acc=["Augmentative communication devices", "Written instructions",
+                 "Picture-based communication"]),
+        "Voice Disorder": _cap(
+            fine="Medium", social="Medium",
+            acc=["Text-to-speech software", "Written communication", "Email-first workflows"]),
+        "Articulation Disorder": _cap(
+            fine="Medium", social="Medium",
+            acc=["Clear communication protocols", "Written follow-ups", "Quiet meeting rooms"]),
+        "Other": _cap(social="Medium"),
+    },
+    "Cancer": {
+        "Active Treatment": _cap(
+            energy="Low", physical="Medium", cognitive="Medium",
+            acc=["Flexible schedule", "Remote-friendly work", "Medical leave support",
+                 "Reduced workload", "Quiet workspace"]),
+        "Survivor/Remission": _cap(
+            energy="Medium", physical="Medium",
+            acc=["Flexible schedule", "Medical monitoring breaks", "Ergonomic workstation"]),
+        "Rare Cancer Type": _cap(
+            energy="Low",
+            acc=["Flexible schedule", "Remote-friendly work", "Medical accommodations"]),
+        "Other": _cap(energy="Low"),
+    },
+    "Rare Disease": {
+        "Genetic Disorder": _cap(
+            energy="Low", physical="Medium",
+            acc=["Flexible schedule", "Remote-friendly work", "Medical accommodations"]),
+        "Autoimmune Condition": _cap(
+            energy="Low", physical="Medium",
+            acc=["Flexible schedule", "Remote-friendly work", "Stress-reduction environment"]),
+        "Metabolic Disorder": _cap(
+            energy="Low",
+            acc=["Flexible schedule", "Medical monitoring breaks", "Dietary accommodations"]),
+        "Other": _cap(energy="Low"),
+    },
 }
 
 EXENTS_DEFAULT = {"Amputee": "Other"}
+
+# NCDA AO No. 001, Series of 2021 — Official Disability Type Classification
+# These are the 11 primary disability types recognized for PWD ID issuance
+# relative to Republic Acts 9442, 10754, 11215, 10747.
+NCDA_DISABILITY_TYPES = {
+    "Physical": "Physical disability affecting mobility or bodily function",
+    "Visual": "Visual impairment including total blindness, low vision, and color blindness",
+    "Hearing": "Deaf or Hard of Hearing disability",
+    "Learning": "Learning disability including Autism (ASD), ADHD, Dyslexia, Dysgraphia",
+    "Intellectual": "Intellectual disability including Down Syndrome, Developmental Delay",
+    "Psychosocial": "Psychosocial disability affecting social and emotional functioning",
+    "Mental": "Mental disability including Schizophrenia, Bipolar Disorder, Major Depression",
+    "Orthopedic": "Orthopedic/musculoskeletal disability including spinal cord injury, amputee, cerebral palsy",
+    "Speech and Language Impairment": "Speech and language impairment including stuttering, aphasia, voice disorders",
+    "Cancer": "Person with cancer under RA 11215 (The Philippine Cancer Act)",
+    "Rare Disease": "Person with rare disease under RA 10747 (The Rare Disease Act)",
+}
 
 
 def _resolve_preset(category, subtype, extent=None):
@@ -657,4 +820,33 @@ def score_job_compatibility(user_profile, job, capabilities=None, overlap_skills
         "narrative": suitability_summary,
         "accommodations": capabilities.get("accommodations") or [],
         "facts": facts_dict,
+        "icf_references": _get_icf_references(explanations),
     }
+
+
+def _get_icf_references(explanations):
+    """Map dimension explanations to ICF codes for regulatory alignment."""
+    refs = []
+    for ex in explanations:
+        dim_key = ex.get("dimension_key")
+        if dim_key and dim_key in ICF_DIMENSION_MAP:
+            icf = ICF_DIMENSION_MAP[dim_key]
+            refs.append({
+                "dimension": ex["dimension"],
+                "icf_code": icf["icf_code"],
+                "icf_name": icf["icf_name"],
+                "icf_domain": icf["icf_domain"],
+                "gap": ex.get("job_level", "Medium"),
+                "verdict": ex.get("verdict", "match"),
+            })
+    return refs
+
+
+def get_ncda_disability_types():
+    """Return the NCDA AO No. 001 s.2021 disability type classifications."""
+    return NCDA_DISABILITY_TYPES.copy()
+
+
+def get_icf_dimension_map():
+    """Return the ICF-aligned dimension mappings."""
+    return ICF_DIMENSION_MAP.copy()

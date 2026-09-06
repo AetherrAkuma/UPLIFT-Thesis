@@ -1,4 +1,4 @@
-# UPLIFT: Architectural & System Flow Walkthrough (Version 9.0)
+# UPLIFT: Architectural & System Flow Walkthrough (Version 9.1)
 
 This document provides a comprehensive technical and architectural walkthrough of the **UPLIFT Suitability Engine** — a **Two-Sided Inclusive Vocational Marketplace** bridging Talented Persons with Disabilities (PWDs) with Inclusive Organizations through AI-driven workplace suitability matching, deterministic capability verification, and ethical algorithmic auditing.
 
@@ -6,12 +6,13 @@ This document provides a comprehensive technical and architectural walkthrough o
 
 ## 1. System Overview & Purpose
 
-**UPLIFT** (*A Web-Based Semantic Employment Matching and Workplace Suitability System for Persons with Disabilities at the National Council on Disability Affairs*) moves beyond obsolete keyword matching. It deploys a **4-Stage AI/Ergonomic Pipeline** grounded in Philippine disability legislation to mathematically evaluate workplace suitability, physical safety, operational tempo, and vocational competence.
+**UPLIFT** (*A Web-Based Semantic Employment Matching and Workplace Suitability System for Persons with Disabilities at the National Council on Disability Affairs*) moves beyond obsolete keyword matching. It deploys a **5-Stage AI/Ergonomic Pipeline** grounded in Philippine disability legislation to mathematically evaluate workplace suitability, physical safety, operational tempo, vocational competence, and algorithmic fairness.
 
 ### Core Objectives
 *   **Empower PWD Candidates**: Provide objective, transparent, and auditable career matching with personalized Suitability Reports without categorical disability stereotyping.
 *   **Support Inclusive Employers**: Provide tools to model workstation ergonomics, specify accommodations, and recruit from an audited, verified talent pool.
 *   **Ensure Safety, Trust & Compliance**: Integrate strict **Human-in-the-Loop (HITL)** employer verification, full audit logging, and compliance with **RA 10173** (Data Privacy Act), **BP 344** (Accessibility Law), and **RA 10524** (Equal Opportunity Employment for PWDs).
+*   **Enforce Algorithmic Fairness**: Deploy real-time **AIF360 demographic parity auditing** across the 11 NCDA AO No. 001 s.2021 disability types, with production-wired `match_logs` ingestion feeding continuous fairness evaluation.
 
 ---
 
@@ -77,7 +78,8 @@ The UPLIFT platform is structured around a multi-tier **Input-Process-Output (IP
 |    - Candidate applications with pre-assessed suitability profiles and ATS resumes.                |
 | 3. System Administrators (NCDA):                                                                   |
 |    - Complete immutable audit logs of administrative actions.                                      |
-|    - AIF360 demographic parity, disparate impact, and group disparity reports across disabilities. |
+|    - Real-time AIF360 fairness reports: demographic parity, disparate impact, and group disparity  |
+|      across 11 NCDA AO No. 001 s.2021 disability types, powered by live match_logs ingestion.     |
 |    - Real-time marketplace statistics and system telemetry.                                        |
 +----------------------------------------------------------------------------------------------------+
 ```
@@ -104,7 +106,7 @@ graph TB
     end
 
     subgraph Execution_Pipelines
-        MP["4-Stage Matching Pipeline"]
+        MP["5-Stage Matching Pipeline"]
         IP["Job Ingestion Pipeline (Background)"]
         CE_ENG["Capability Compatibility Engine"]
         CV_ENG["RenderCV Resume Engine (Typst)"]
@@ -138,6 +140,7 @@ graph TB
     MP --> CE
     MP --> CE_ENG
     MP --> GEN
+    MP --> FE
     IP --> GEN
     IP --> BE
 
@@ -163,7 +166,7 @@ graph TB
 | **Cross-Encoder** | `CrossEncoder` (ms-marco-MiniLM-L-6-v2) | PyTorch Runtime | Direct Tensor Inference | Performs deep pairwise cross-attention for high-precision vocational relevance ranking. |
 | **Generative LLM** | HuggingFace Transformers (flan-t5-base) | PyTorch / GPU or CPU | Seq2Seq Pipeline | Zero-shot feature extraction from unstructured job text and personalized narrative synthesis. |
 | **Resume Compiler** | RenderCV v2.8 + Typst | Local Executable / Subprocess | YAML to CLI to PDF | Compiles structured JSON profiles into publication-grade, ATS-compliant LaTeX PDF resumes. |
-| **Fairness Toolkit**| IBM AIF360 v0.6.1 | PostgreSQL `match_logs` | Offline Test / Audit API | Evaluates demographic parity, disparate impact, and statistical disparity across disability groups. |
+| **Fairness Toolkit**| IBM AIF360 v0.6.1 | PostgreSQL `match_logs` | Production Audit API | Evaluates demographic parity, disparate impact, and statistical disparity across 11 NCDA disability groups. Fed by real-time log_match() calls in suitability-match pipeline. |
 
 ---
 
@@ -385,6 +388,7 @@ Stores PWD candidate profiles, employer credentials, and administrative accounts
 | `rejection_reason`| `TEXT` | `NULL` | None | Stated reason if registration rejected. |
 | `auto_generate_resume`| `INT4` | `NULL` | `0` | Flag (0/1) for automatic RenderCV resume generation. |
 | `disability_profile`| `TEXT` (JSON)| `NULL` | `'{}'` | Fine-grained 9-axis capability profile. |
+| `pwd_id_reference`| `TEXT` | `NULL` | `''` | PWD ID reference number from DOH PRPWD National Registry (NCDA AO No. 001 s.2021). |
 
 ---
 
@@ -505,9 +509,9 @@ Immutable audit log tracking all administrative actions.
 
 ---
 
-## 7. The 4-Stage Suitability Matching Pipeline
+## 7. The 5-Stage Suitability Matching Pipeline
 
-The core intelligence of UPLIFT is its **4-Stage Matching Pipeline**, executing inside `/api/pwd/suitability-match`.
+The core intelligence of UPLIFT is its **5-Stage Matching Pipeline**, executing inside `/api/pwd/suitability-match`.
 
 ```mermaid
 flowchart TD
@@ -537,6 +541,11 @@ flowchart TD
         LLM["Generative LLM: Flan-T5-Base (CQA Synthesis)"]
     end
 
+    subgraph Stage_5_Fairness_Auditing
+        LOG["log_match() → match_logs Table"]
+        AIF["AIF360 Demographic Parity Engine"]
+    end
+
     Candidate --> BE
     BE -- "384-dim Vector" --> HNSW
     JobsDB --> HNSW
@@ -556,6 +565,8 @@ flowchart TD
     COMPOSITE --> LLM
     AUDIT --> Results["Final Suitability Dashboard & Report"]
     LLM --> Results
+    COMPOSITE --> LOG
+    LOG --> AIF
 ```
 
 ### Stage 1: Semantic Retrieval (Bi-Encoder + `pgvector` HNSW)
@@ -580,6 +591,16 @@ Evaluates the 4 independent criteria pillars:
 ### Stage 4: Generative Reasoning & Explainability Audit
 *   **Deterministic Audit Breakdown**: Identifies exact **Strengths** ($\text{Gap} \le 0$), **Manageable Stretches** ($\text{Gap} = 1$), and **Actionable Accommodations** ($\text{Gap} \ge 2$).
 *   **Flan-T5 Synthesis**: Generates narrative suitability reports (Compatibility, Performance, Advice, Challenges) grounded strictly in computed metrics.
+
+### Stage 5: Real-Time Fairness Auditing (AIF360 Production Pipeline)
+*   **Match Logging**: After top-10 results are returned, each match is logged to `match_logs` via `log_match()`, recording the user's disability category (mapped to 11 NCDA types), composite score, and component scores (safety, skill, stamina).
+*   **Bounded Retention**: Stale rows older than 30 days are pruned at startup via `prune_match_logs()`, ensuring the fairness dataset stays current and bounded.
+*   **Admin Audit Endpoint**: `GET /api/admin/fairness-report` (admin-only) invokes `compute_admin_fairness_report()` which runs AIF360's `BinaryLabelDatasetMetric` against the full `match_logs` dataset, returning:
+    *   Per-group average scores and favorable-match rates (threshold: score ≥ 70%)
+    *   Demographic parity ratio and statistical parity difference
+    *   Disparate impact ratio across all 11 NCDA disability types
+    *   Group-level disparity metrics relative to the user's own disability group
+*   **Minimum Data Threshold**: AIF360 requires ≥ 10 `match_logs` records to produce meaningful metrics; the endpoint returns a count message until the threshold is met.
 
 ---
 
@@ -667,4 +688,6 @@ Every match produces a structured natural-language explanation to eliminate "bla
 *   **RA 10173 (Data Privacy Act of 2012)**: Candidate medical diagnoses and PWD ID card numbers are never stored in plain text or transmitted off-server. All AI models run locally on intranet infrastructure.
 *   **BP 344 (Accessibility Law of 1982)**: Workstation physical requirements are verified against Philippine building accessibility mandates.
 *   **RA 10524 (Equal Opportunity Employment for PWDs)**: The system mathematically prevents blanket disqualification by evaluating capabilities rather than diagnostic labels.
-*   **AIF360 Fairness Integration**: Offline test suites evaluate disparate impact across 7 disability groups, ensuring that demographic parity is upheld without degrading matching accuracy.
+*   **NCDA Administrative Order No. 001, Series of 2021**: Disability classifications align with the 11 primary types recognized for PWD ID issuance relative to Republic Acts 9442, 10754, 11215, 10747. Categories: Physical, Visual, Hearing, Learning, Intellectual, Psychosocial, Mental, Orthopedic, Speech and Language Impairment, Cancer, Rare Disease.
+*   **ICF (WHO International Classification of Functioning, Disability and Health)**: The system's 9-axis capability model maps to ICF body function codes (b-prefix) and activity/participation domains (d-prefix), enabling international regulatory alignment and work suitability assessment using the bio-psycho-social model.
+*   **AIF360 Fairness Integration (Production-Wired)**: Every suitability match call writes to `match_logs` via `log_match()`. The `GET /api/admin/fairness-report` endpoint runs AIF360's `BinaryLabelDatasetMetric` against this live dataset, computing demographic parity ratio, disparate impact, and statistical parity difference across the 11 NCDA disability types. Stale logs are pruned at 30-day retention. Minimum 10 records required for meaningful audit.

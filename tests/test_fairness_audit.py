@@ -21,21 +21,26 @@ from fairness_engine import (
 )
 
 def test_categorization():
-    print("=== 1. Testing Disability Categorization ===")
+    print("=== 1. Testing Disability Categorization (NCDA AO No. 001 s.2021) ===")
     test_cases = [
         (["Visual Impairment (Low Vision)"], "Visual"),
         (["Hearing Impairment", "Deaf"], "Hearing"),
         (["Physical / Mobility Impairment"], "Physical"),
         (["Learning Disability"], "Learning"),
-        (["Chronic_Illness", "Fatigue"], "Chronic_Illness"),
+        (["Intellectual Disability"], "Intellectual"),
         (["Psychosocial Disability"], "Psychosocial"),
+        (["Mental Disability", "Schizophrenia"], "Mental"),
+        (["Orthopedic Disability", "Amputee"], "Orthopedic"),
+        (["Speech and Language Impairment", "Stuttering"], "Speech and Language Impairment"),
+        (["Cancer Patient"], "Cancer"),
+        (["Rare Disease", "Genetic Disorder"], "Rare Disease"),
         ([], "Unknown"),
     ]
     for disabilities, expected in test_cases:
         cat = categorize_disability(disabilities)
         assert cat == expected, f"Expected {expected}, got {cat} for {disabilities}"
         print(f"  [PASS] {disabilities} -> '{cat}'")
-    print("All disability categories mapped accurately.\n")
+    print("All 11 NCDA disability categories mapped accurately.\n")
 
 
 def test_offline_fairness_audit():

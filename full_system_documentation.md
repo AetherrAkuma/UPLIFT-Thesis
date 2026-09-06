@@ -309,3 +309,8 @@ The system utilizes a 100% Python-based pipeline for maximum efficiency:
 
 ## 9. Summary of Innovation
 UPLIFT transforms recruitment from a search-and-apply process into a **Suitability-Validated** journey. By integrating expert vocational knowledge with state-of-the-art NLP, it ensures that PWDs find roles where they can not only work but thrive safely.
+
+### Regulatory & Standards Alignment
+*   **NCDA Administrative Order No. 001, Series of 2021**: Disability classifications align with the 11 primary types recognized for PWD ID issuance relative to Republic Acts 9442, 10754, 11215, 10747. Categories: Physical, Visual, Hearing, Learning, Intellectual, Psychosocial, Mental, Orthopedic, Speech and Language Impairment, Cancer, Rare Disease.
+*   **ICF (WHO, 2001)**: The system's 9-axis capability model maps to the International Classification of Functioning, Disability and Health body function codes (b-prefix) and activity/participation domains (d-prefix), enabling international regulatory alignment and work capability assessment using the bio-psycho-social model.
+*   **PWD ID Reference Number**: The system stores and verifies PWD ID reference numbers against the DOH PRPWD National Registry, ensuring alignment with NCDA AO No. 001 s.2021 for PWD identification card issuance.

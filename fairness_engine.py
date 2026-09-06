@@ -23,7 +23,8 @@ logger = logging.getLogger("fairness_engine")
 
 DISABILITY_CATEGORIES = [
     "Physical", "Visual", "Hearing", "Learning",
-    "Intellectual", "Psychosocial", "Chronic_Illness"
+    "Intellectual", "Psychosocial", "Mental", "Orthopedic",
+    "Speech and Language Impairment", "Cancer", "Rare Disease"
 ]
 
 
@@ -31,8 +32,23 @@ def categorize_disability(disabilities):
     if not disabilities:
         return "Unknown"
     first = disabilities[0] if isinstance(disabilities, list) else str(disabilities)
+    first_lower = first.lower()
+    # Priority mapping for overlapping terms to align with NCDA AO No. 001 s.2021
+    PRIORITY_MAP = {
+        "speech": "Speech and Language Impairment",
+        "language": "Speech and Language Impairment",
+        "cancer": "Cancer",
+        "rare disease": "Rare Disease",
+        "mental": "Mental",
+        "orthopedic": "Orthopedic",
+        "deaf": "Hearing",
+        "hard of hearing": "Hearing",
+    }
+    for key, cat in PRIORITY_MAP.items():
+        if key in first_lower:
+            return cat
     for cat in DISABILITY_CATEGORIES:
-        if cat.lower() in first.lower():
+        if cat.lower() in first_lower:
             return cat
     return "Other"
 

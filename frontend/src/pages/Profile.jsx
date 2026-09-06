@@ -12,13 +12,17 @@ import {
 import PDFViewer from '../components/PDFViewer';
 
 const SUB_CATEGORIES = {
-    'Physical': ['Wheelchair User', 'Amputee', 'Cerebral Palsy', 'Muscular Dystrophy', 'Chronic Pain', 'Other'],
+    'Physical': ['Wheelchair User', 'Chronic Pain', 'Neurological Condition', 'Other'],
     'Visual': ['Total Blindness', 'Low Vision', 'Color Blindness', 'Other'],
     'Hearing': ['Profoundly Deaf', 'Hard of Hearing', 'Auditory Processing', 'Other'],
     'Learning': ['Autism (ASD)', 'ADHD', 'Dyslexia', 'Dysgraphia', 'Other'],
     'Intellectual': ['Down Syndrome', 'Developmental Delay', 'Other'],
-    'Psychosocial': ['Bipolar Disorder', 'Depression', 'Anxiety Disorder', 'PTSD', 'Schizophrenia', 'Other'],
-    'Chronic_Illness': ['Cancer Patient/Survivor', 'Rare Disease', 'Speech Impairment', 'Chronic Respiratory', 'Other']
+    'Psychosocial': ['Anxiety Disorder', 'PTSD', 'Personality Disorder', 'Adjustment Disorder', 'Other'],
+    'Mental': ['Bipolar Disorder', 'Schizophrenia', 'Major Depression', 'Other'],
+    'Orthopedic': ['Spinal Cord Injury', 'Cerebral Palsy', 'Muscular Dystrophy', 'Polio/Post-Polio Syndrome', 'Amputee', 'Scoliosis/Kyphosis', 'Other'],
+    'Speech and Language Impairment': ['Stuttering/Fluency Disorder', 'Aphasia', 'Voice Disorder', 'Articulation Disorder', 'Other'],
+    'Cancer': ['Active Treatment', 'Survivor/Remission', 'Rare Cancer Type', 'Other'],
+    'Rare Disease': ['Genetic Disorder', 'Autoimmune Condition', 'Metabolic Disorder', 'Other']
 };
 
 const EXTENT_OPTIONS = {
@@ -58,7 +62,8 @@ const Profile = () => {
         projects: '',
         certifications: '',
         awards: '',
-        auto_generate_resume: false
+        auto_generate_resume: false,
+        pwd_id_reference: ''
     });
     const [saving, setSaving] = useState(false);
     const [saveStatus, setSaveStatus] = useState(null);
@@ -84,7 +89,8 @@ const Profile = () => {
                 projects: user.projects || '',
                 certifications: user.certifications || '',
                 awards: user.awards || '',
-                auto_generate_resume: user.auto_generate_resume || false
+                auto_generate_resume: user.auto_generate_resume || false,
+                pwd_id_reference: user.pwd_id_reference || ''
             });
             try {
                 const dp = (typeof user.disability_profile === 'object' && user.disability_profile) || JSON.parse(user.disability_profile || '{}');
@@ -197,9 +203,9 @@ const Profile = () => {
         setProfile(prev => {
             const existing = prev.disabilities || [];
             if (!existing.includes(disabilityStr)) {
-                return { ...prev, disabilities: [...existing, disabilityStr] };
+                return { ...prev, disabilities: [...existing, disabilityStr], pwd_id_reference: sd.pwd_id_reference || '' };
             }
-            return prev;
+            return { ...prev, pwd_id_reference: sd.pwd_id_reference || '' };
         });
         setShowScanModal(false);
     };

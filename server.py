@@ -31,6 +31,7 @@ from compatibility_engine import (
     build_qualification_context, format_education,
 )
 from suitability_index import compute_suitability_index
+from fairness_engine import log_match, compute_admin_fairness_report, prune_match_logs
 from ph_schools_data import PH_SCHOOLS
 from render_engine import generate_resume
 
@@ -354,6 +355,9 @@ def init_db():
     cursor.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS employer_proof TEXT DEFAULT ''")
     cursor.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS verification_data TEXT DEFAULT '{}'")
     cursor.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS disability_profile TEXT DEFAULT '{}'")
+    
+    # NCDA AO No. 001 s.2021: PWD ID Reference Number for DOH registry alignment
+    cursor.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS pwd_id_reference TEXT DEFAULT ''")
     
     # Admin and System Tables
     cursor.execute("""
@@ -798,10 +802,19 @@ async def get_admin_logs(user: dict = Depends(RoleChecker(['admin']))):
 
 @app.get("/api/admin/fairness-report")
 async def get_fairness_report(user: dict = Depends(RoleChecker(['admin']))):
-    return {
-        "status": "decoupled",
-        "message": "Fairness toolkit is decoupled from runtime system and configured for offline testing only. Run tests/test_fairness_audit.py."
-    }
+    """AIF360 fairness audit across all disability groups in match_logs.
+    
+    Tracks demographic parity, disparate impact, and group-level score
+    distributions across the 11 NCDA AO No. 001 s.2021 disability types.
+    Data is populated by log_match() calls in the suitability-match pipeline.
+    """
+    conn = get_db_connection()
+    cursor = conn.cursor(cursor_factory=RealDictCursor)
+    try:
+        report = compute_admin_fairness_report(cursor=cursor)
+        return report
+    finally:
+        conn.close()
 
 @app.post("/api/employer/verify")
 async def employer_submit_verification(req: EmployerVerificationSubmission, user: dict = Depends(RoleChecker(['employer']))):
@@ -1812,6 +1825,20 @@ async def pwd_suitability_match(req: SearchRequest, user: dict = Depends(RoleChe
     matches.sort(key=lambda x: x["metrics"]["final_accessibility_percentage"], reverse=True)
     matches = matches[:10]
 
+    # Log each match result to match_logs for AIF360 fairness auditing
+    # (NCDA AO No. 001 s.2021 — demographic parity across 11 disability types)
+    for m in matches:
+        try:
+            log_match(
+                user_id=user['id'],
+                disabilities=disabilities,
+                scores=m["metrics"],
+                job_id=m.get("job_id"),
+                cursor=conn.cursor(cursor_factory=RealDictCursor),
+            )
+        except Exception as log_err:
+            print(f"[WARN] Fairness log_match failed: {log_err}")
+
     conn.commit()
     conn.close()
 
@@ -2720,12 +2747,14 @@ async def verify_pwd_doh(data: dict):
         
         scanned_data = {
             "id_number": record.get("pwd_id_number", pwd_id),
+            "pwd_id_reference": pwd_id,
             "full_name": full_name or "Registered PWD Member",
             "disability_type": record.get("type_of_disability", "Verified"),
             "disability_subtype": record.get("disability_details", "Verified"),
             "date_issued": record.get("date_issued", ""),
             "expiry_date": record.get("expiry_date", record.get("date_of_expiration", "")),
-            "issuing_office": record.get("issuing_office", record.get("place_issued", "LGU PDAO"))
+            "issuing_office": record.get("issuing_office", record.get("place_issued", "LGU PDAO")),
+            "ncda_ao_compliance": "NCDA AO No. 001, Series of 2021"
         }
         
         return {
