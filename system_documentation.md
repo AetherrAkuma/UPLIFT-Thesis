@@ -18,8 +18,7 @@ The system is built on a modern, high-performance stack optimized for AI inferen
 | **Frontend** | React (Vite) | Single Page Application (SPA) with a focus on accessibility (WCAG compliance). |
 | **Styling** | Vanilla CSS / CSS Modules | Custom design system for premium look and feel. |
 | **Backend** | FastAPI (Python) | High-performance asynchronous API orchestration. |
-| **Database** | SQLite3 | Relational data storage for profiles, jobs, and audit logs. |
-| **Vector Engine** | FAISS | Geometric indexing for constant-time semantic job retrieval. |
+| **Database & Vector Engine** | PostgreSQL + pgvector | Relational data storage, vector similarity search, and ACID compliance. |
 | **AI Models** | Sentence-Transformers | Bi-Encoders (`all-MiniLM-L12-v2`) and Cross-Encoders (`ms-marco-MiniLM-L-6-v2`). |
 | **LLM Engine** | Flan-T5-Base | Generative reasoning for suitability analysis and feature extraction. |
 | **OCR Engine** | PaddleOCR-VL | Layout-aware vision-language OCR for ID verification. |
@@ -49,7 +48,7 @@ UPLIFT follows a **Modular Monolith** architecture with specialized pipelines fo
 ---
 
 ## 4. Database Schema
-The system uses a relational schema stored in `uplift_prototype.db`.
+The system uses a relational PostgreSQL database schema with `pgvector` enabled for vector embeddings.
 
 ### Core Tables:
 *   **`users`**: Stores PWD profiles, Employer metadata, and Admin accounts.

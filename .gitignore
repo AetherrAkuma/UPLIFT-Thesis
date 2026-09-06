@@ -31,3 +31,13 @@ Thumbs.db
 .vscode/
 .idea/
 *.swp
+
+# SQLite & Database Files
+*.db
+*.sqlite
+*.sqlite3
+*.bak
+
+# Scratch & Temporary Folders
+scratch/
+legacy-vanilla/

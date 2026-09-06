@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 import psycopg2
 from psycopg2.extras import RealDictCursor
+from psycopg2.pool import ThreadedConnectionPool
 from pgvector.psycopg2 import register_vector
 import json
 import uuid
@@ -16,7 +17,6 @@ import warnings
 import logging
 import tempfile
 import numpy as np
-import faiss
 
 import torch
 import hashlib
@@ -183,11 +183,57 @@ def check_and_create_db():
             print(instructions)
             raise e
 
+class PooledConnectionWrapper:
+    """
+    Transparent proxy around a psycopg2 pooled connection.
+    Calling conn.close() cleanly rolls back any uncommitted transaction
+    and returns the physical connection to the pool rather than severing TCP.
+    """
+    def __init__(self, conn, pool):
+        self._conn = conn
+        self._pool = pool
+        self._closed = False
+
+    def close(self):
+        if not self._closed:
+            self._closed = True
+            try:
+                if not self._conn.closed and self._conn.status == psycopg2.extensions.STATUS_IN_TRANSACTION:
+                    self._conn.rollback()
+            except Exception:
+                pass
+            try:
+                self._pool.putconn(self._conn)
+            except Exception:
+                pass
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.close()
+
+    def __getattr__(self, name):
+        return getattr(self._conn, name)
+
+_db_pool = None
+
+def get_db_pool():
+    global _db_pool
+    if _db_pool is None or _db_pool.closed:
+        _db_pool = ThreadedConnectionPool(
+            minconn=2,
+            maxconn=20,
+            dsn=DB_URI
+        )
+    return _db_pool
+
 def get_db_connection():
-    conn = psycopg2.connect(DB_URI)
+    pool = get_db_pool()
+    conn = pool.getconn()
     conn.autocommit = False
     register_vector(conn)
-    return conn
+    return PooledConnectionWrapper(conn, pool)
 
 def init_db():
     check_and_create_db()
@@ -385,48 +431,24 @@ def init_db():
             )
         print(f"[INFO] Seeded {len(PH_SCHOOLS)} Philippine schools.")
 
-    # Seed initial demo accounts and jobs from uplift_prototype.db if database is completely empty
-    cursor.execute("SELECT COUNT(*) FROM jobs")
-    if cursor.fetchone()['count'] == 0 and os.path.exists("uplift_prototype.db"):
-        import sqlite3
-        try:
-            s_conn = sqlite3.connect("uplift_prototype.db")
-            s_conn.row_factory = sqlite3.Row
-            s_cur = s_conn.cursor()
-            for tbl in ['users', 'jobs', 'system_settings']:
-                s_cur.execute(f"SELECT name FROM sqlite_master WHERE type='table' AND name='{tbl}';")
-                if not s_cur.fetchone():
-                    continue
-                s_cur.execute(f"SELECT * FROM {tbl}")
-                rows = s_cur.fetchall()
-                if not rows:
-                    continue
-                cols = [col[0] for col in s_cur.description]
-                col_str = ", ".join(cols)
-                placeholders = ", ".join(["%s"] * len(cols))
-                for r in rows:
-                    vals = list(r)
-                    if tbl == 'jobs' and 'embedding' in cols:
-                        e_idx = cols.index('embedding')
-                        if vals[e_idx] and isinstance(vals[e_idx], str):
-                            try:
-                                vals[e_idx] = json.loads(vals[e_idx])
-                            except Exception:
-                                vals[e_idx] = None
-                    try:
-                        cursor.execute(f"INSERT INTO {tbl} ({col_str}) VALUES ({placeholders}) ON CONFLICT DO NOTHING;", vals)
-                    except Exception:
-                        pass
-            s_conn.close()
-            print("[INFO] Auto-seeded initial demo users and jobs from uplift_prototype.db.")
-        except Exception as seed_err:
-            print(f"[WARNING] Could not auto-seed prototype data: {seed_err}")
 
     # match_logs: bounded retention index + startup prune
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_match_logs_created_at ON match_logs(created_at)")
     cursor.execute("DELETE FROM match_logs WHERE created_at < NOW() - INTERVAL '30 days'")
     if cursor.rowcount and cursor.rowcount > 0:
         print(f"[INFO] Pruned {cursor.rowcount} stale match_logs rows.")
+    
+    # High-Performance Vector & Relational Indexes
+    cursor.execute("""
+        CREATE INDEX IF NOT EXISTS idx_jobs_embedding_hnsw 
+        ON jobs USING hnsw (embedding vector_cosine_ops) 
+        WITH (m = 16, ef_construction = 64);
+    """)
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status);")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_jobs_employer_id ON jobs(employer_id);")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_applications_user_id ON applications(user_id);")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_applications_job_id ON applications(job_id);")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id);")
     
     conn.commit()
     conn.close()
@@ -810,7 +832,7 @@ async def employer_submit_verification(req: EmployerVerificationSubmission, user
 def build_job_semantic_envelope(job: dict) -> str:
     """
     Constructs a rich, unambiguous semantic envelope for Bi-Encoder embedding (all-MiniLM-L12-v2)
-    and FAISS index retrieval. Encodes vocational skills, workstation posture, communication style,
+    and pgvector HNSW index retrieval. Encodes vocational skills, workstation posture, communication style,
     and environmental parameters into high-dimensional dense vector space.
     """
     title = job.get('job_title') or 'Job'
@@ -1566,13 +1588,6 @@ async def pwd_suitability_match(req: SearchRequest, user: dict = Depends(RoleChe
             })
         return {"message": "Manual search results", "matches": matches}
         
-    cursor.execute("SELECT * FROM jobs WHERE status = 'approved' AND embedding IS NOT NULL")
-    approved_jobs = [dict(row) for row in cursor.fetchall()]
-
-    if not approved_jobs:
-        conn.close()
-        return {"message": "No approved jobs available.", "matches": []}
-
     # Prepare profile data for capability matching
     disabilities = json.loads(user_profile.get('disabilities', '[]'))
     capabilities = build_capability_profile(
@@ -1597,54 +1612,44 @@ async def pwd_suitability_match(req: SearchRequest, user: dict = Depends(RoleChe
     pwd_context = " ".join(pwd_context_parts) if pwd_context_parts else "General Job Search"
     
     pwd_vector_np = model.encode(pwd_context, convert_to_numpy=True).astype('float32')
-    pwd_vector_np = np.expand_dims(pwd_vector_np, axis=0) 
-    faiss.normalize_L2(pwd_vector_np)
+    norm = np.linalg.norm(pwd_vector_np)
+    if norm > 0:
+        pwd_vector_np = pwd_vector_np / norm
+    pwd_vector_list = pwd_vector_np.flatten().tolist()
 
-    # --- 2.5. BUILD FAISS INDEX DYNAMICALLY ---
-    job_embeddings = []
-    valid_jobs = []
-    for job in approved_jobs:
-        try:
-            emb = job['embedding']
-            if isinstance(emb, str):
-                emb = json.loads(emb)
-            elif isinstance(emb, np.ndarray):
-                emb = emb.tolist()
-            if emb:
-                job_embeddings.append(emb)
-                valid_jobs.append(job)
-        except Exception as e:
-            print(f"[WARN] Failed to parse embedding for job {job.get('id')}: {e}")
-            continue
-            
-    if not job_embeddings:
-        return {"message": "No valid job embeddings found.", "matches": []}
+    # --- 3. NATIVE PGVECTOR COSINE RETRIEVAL (HNSW-Accelerated Top-30) ---
+    max_k = 30
+    cursor.execute("""
+        SELECT *, 1 - (embedding <=> %s::vector) AS cos_sim
+        FROM jobs 
+        WHERE status = 'approved' AND embedding IS NOT NULL
+        ORDER BY embedding <=> %s::vector ASC
+        LIMIT %s
+    """, (json.dumps(pwd_vector_list), json.dumps(pwd_vector_list), max_k))
+    top_candidates = [dict(row) for row in cursor.fetchall()]
 
-    job_embeddings_np = np.array(job_embeddings).astype('float32')
-    faiss.normalize_L2(job_embeddings_np)
-    
-    dimension = job_embeddings_np.shape[1]
-    index = faiss.IndexFlatIP(dimension)
-    index.add(job_embeddings_np)
+    if not top_candidates:
+        conn.close()
+        return {"message": "No approved jobs with valid vector embeddings found.", "matches": []}
 
-    # --- 3. FAISS SEARCH EXECUTION (Retrieval) ---
-    k = min(len(valid_jobs), 30)
-    distances, indices = index.search(pwd_vector_np, k)
+    k = len(top_candidates)
+    valid_jobs = top_candidates
+    distances = [[float(c.get('cos_sim') or 0.0) for c in top_candidates]]
+    indices = [[i for i in range(k)]]
 
-    # --- 3.5 CROSS-ENCODER RE-RANKING (Precision) ---
+    # --- 3.5 CROSS-ENCODER RE-RANKING (Precision Vocational Alignment) ---
     print(f"[INFO] Re-ranking {k} candidates with Cross-Encoder...")
     pairs = []
     for i in range(k):
         job = valid_jobs[indices[0][i]]
-        # We compare user context vs job requirements specifically
-        pairs.append([pwd_context, job['physical_requirements']])
+        job_summary = f"{job['job_title']}. {job['job_description']}"
+        pairs.append([pwd_context, job_summary])
 
-    
     if pairs:
-        # Cross-Encoders are more accurate as they see both texts simultaneously
         raw_cross_scores = cross_model.predict(pairs)
-        # Shift sigmoid to be more optimistic (bias +1.0) and add temperature scaling
-        cross_scores = (1 / (1 + np.exp(-(raw_cross_scores + 1.5) / 1.2))) * 100
+        # MS-MARCO Cross-Encoder calibration for document-level matching:
+        # Map logit range [-10.0, 0.0+] linearly onto [0.0, 100.0]
+        cross_scores = [min(100.0, max(0.0, ((float(z) + 10.0) / 10.0) * 100)) for z in raw_cross_scores]
     else:
         cross_scores = []
 
@@ -1667,77 +1672,67 @@ async def pwd_suitability_match(req: SearchRequest, user: dict = Depends(RoleChe
         cos_sim = distances[0][i] 
         job = valid_jobs[job_idx]
         
-        # 1. Physical Safety Score (Hybrid Bi-Encoder + Cross-Encoder)
-        # Bi-Encoder (cos_sim) provides the broad semantic match
-        # Normalize: 0.25 (floor) to 0.75 (ceiling) maps to 0-100
-        # This is more realistic for embedding similarity ranges
-        raw_sim = float(cos_sim)
-        bi_score = min(100.0, max(0.0, (raw_sim - 0.25) / 0.5 * 100))
-        
-        cross_score = float(cross_scores[i])
-        
-        # Blend: 30% Bi-Encoder, 70% Cross-Encoder (Trust high-precision more but keep semantic floor)
-        safety_score = (bi_score * 0.30) + (cross_score * 0.70)
-        
-        # 2. Sustainability Score (20% Weight)
-        # Logic: Task Intensity vs User Preference
-        job_intensity = job.get('task_intensity', 'Medium')
-        user_pref = user_profile.get('preferred_intensity', 'Medium')
-        
-        stamina_score = 100.0
-        
-        # Intensity Mismatch Penalty
-        intensity_map = {"Low": 1, "Medium": 2, "High": 3}
-        j_int = intensity_map.get(job_intensity, 2)
-        u_pref = intensity_map.get(user_pref, 2)
-        
-        if j_int > u_pref:
-            stamina_score -= (j_int - u_pref) * 25 # Penalty for over-intensity
-        
-        stamina_score = max(0.0, min(100.0, stamina_score))
-            
-        stamina_score = max(0.0, stamina_score)
-        
-        # 3. Skill Alignment Score
-        job_req_skills = set([s.strip().lower() for s in job['structured_skills'].split(",") if s.strip()])
+        # Skill extraction & overlap
+        job_req_skills = set([s.strip().lower() for s in (job.get('structured_skills') or '').split(",") if s.strip()])
         if job_req_skills:
             overlap = list(pwd_skills_set.intersection(job_req_skills))
             missing_skills = list(job_req_skills - pwd_skills_set)
-            skill_score = (len(overlap) / max(1, len(job_req_skills))) * 100
+            kw_score = (len(overlap) / max(1, len(job_req_skills))) * 100
         else:
-            # Fallback: Extract keywords from description
-            # Improved regex to catch shorter skills like IT, SQL, PHP (2+ characters)
-            job_desc_set = set(re.findall(r'\b\w{2,}\b', job['job_description'].lower()))
+            job_desc_set = set(re.findall(r'\b\w{2,}\b', (job.get('job_description') or '').lower()))
             overlap = list(pwd_skills_set.intersection(job_desc_set))
             missing_skills = []
-            
-            # Use the user's provided skill count as the denominator for a more accurate percentage
-            skill_score = (len(overlap) / max(1, len(pwd_skills_set))) * 100
+            kw_score = (len(overlap) / max(1, len(pwd_skills_set))) * 100 if pwd_skills_set else 40.0
         
-        # --- SEMANTIC BOOST ---
-        # If keywords match poorly but the Bi-Encoder (cos_sim) shows high similarity,
-        # we give a "Semantic Boost" to the skill score.
-        semantic_relevance = bi_score # Already normalized 0-100
-        # We blend: 50% Keyword Overlap, 50% Semantic Similarity
-        # This gives a much more "human" feel to the matching
-        skill_score = (skill_score * 0.5) + (semantic_relevance * 0.5)
-        
-        # Minimum baseline for any semantic match
-        if semantic_relevance > 50:
-            skill_score = max(skill_score, 40.0)
-            
-        skill_score = min(100.0, skill_score)
-        
-        # 4. Capability Compatibility Score (replaces the coarse category ontology)
+        # 1. Capability Compatibility Score (from 9-dimension ergonomic matrix)
         compat = score_job_compatibility(user_profile, job, capabilities=capabilities, overlap_skills=overlap)
         ontology_score = compat["score"]
         ontology_reasons = compat["reasons"]
+
+        # 2. Physical Safety Score (Grounded in Ergonomics & BP 344 Accommodations)
+        phys_ex = next((e for e in compat.get('explanations', []) if e.get('dimension_key') == 'physical'), None)
+        sens_ex = next((e for e in compat.get('explanations', []) if e.get('dimension_key') == 'sensory'), None)
+        fine_ex = next((e for e in compat.get('explanations', []) if e.get('dimension_key') == 'fine_motor'), None)
+        
+        base_safety = float(np.mean([
+            phys_ex['score'] if phys_ex else 80.0,
+            sens_ex['score'] if sens_ex else 80.0,
+            fine_ex['score'] if fine_ex else 80.0
+        ]))
+        
+        phys_req_text = (job.get('physical_requirements') or '').lower()
+        acc_features = (job.get('accessibility_features') or '').lower()
+        combined_acc = phys_req_text + " " + acc_features
+        dis_str = str(disabilities).lower()
+        
+        if "wheelchair" in dis_str and any(w in combined_acc for w in ["wheelchair", "seated", "ramp", "elevator", "level floor"]):
+            safety_score = max(base_safety, 95.0)
+        elif phys_ex and phys_ex.get('verdict') == 'mismatch':
+            safety_score = min(base_safety, 30.0)
+        else:
+            safety_score = base_safety
+
+        # 3. Sustainability Score (Task Intensity & Tempo vs User Preference)
+        job_intensity = job.get('task_intensity', 'Medium')
+        user_pref = user_profile.get('preferred_intensity', 'Medium')
+        intensity_map = {"Low": 1, "Medium": 2, "High": 3}
+        j_int = intensity_map.get(job_intensity, 2)
+        u_pref = intensity_map.get(user_pref, 2)
+        stamina_score = 100.0 if j_int <= u_pref else max(0.0, 100.0 - (j_int - u_pref) * 25.0)
+
+        # 4. Skill Alignment Score (Keyword Overlap + Cross-Encoder Relevance + Bi-Encoder Semantic Boost)
+        raw_sim = float(cos_sim)
+        bi_score = min(100.0, max(0.0, (raw_sim - 0.25) / 0.5 * 100))
+        cross_voc_score = float(cross_scores[i]) if i < len(cross_scores) else bi_score
+        
+        skill_score = (kw_score * 0.35) + (cross_voc_score * 0.45) + (bi_score * 0.20)
+        skill_score = min(100.0, max(15.0, skill_score))
 
         # FINAL HYBRID SCORE
         w_safety = user_profile.get('safety_weight', 0.5)
         w_skill = user_profile.get('skill_weight', 0.5)
         w_stamina = user_profile.get('stamina_weight', 0.5)
-        w_ontology = 0.5  # Weight assigned to formal capability compatibility criteria
+        w_ontology = 0.5
         
         total_weight = w_safety + w_skill + w_stamina + w_ontology
         if total_weight <= 0:
@@ -1746,9 +1741,10 @@ async def pwd_suitability_match(req: SearchRequest, user: dict = Depends(RoleChe
         final_accessibility_percentage = ((safety_score * w_safety) + (skill_score * w_skill) + (stamina_score * w_stamina) + (ontology_score * w_ontology)) / total_weight
         
         print(f"[DEBUG] Job: {job['job_title']}")
-        print(f"        - Safety (Cross-Enc): {safety_score:.1f}% (Weight: {w_safety:.2f})")
+        print(f"        - Physical Safety:    {safety_score:.1f}% (Weight: {w_safety:.2f})")
         print(f"        - Skill Alignment:    {skill_score:.1f}% (Weight: {w_skill:.2f})")
-        print(f"        - Stamina/Flex:       {stamina_score:.1f}% (Weight: {w_stamina:.2f})")
+        print(f"        - Stamina/Tempo:      {stamina_score:.1f}% (Weight: {w_stamina:.2f})")
+        print(f"        - Capability Fit:     {ontology_score:.1f}% (Weight: {w_ontology:.2f})")
         print(f"        - FINAL SCORE:        {final_accessibility_percentage:.1f}%")
 
         matches.append({
