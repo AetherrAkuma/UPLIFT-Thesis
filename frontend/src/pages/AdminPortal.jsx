@@ -4,7 +4,7 @@ import {
     ShieldCheck, UserCheck, Briefcase, FileSearch, Activity, 
     CheckCircle2, XCircle, Clock, TrendingUp,
     Users, Settings, Search, Building2,
-    Scale, AlertTriangle, BarChart3, Menu, X, FileText
+    Scale, AlertTriangle, BarChart3, Menu, X, FileText, LogOut
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import axios from 'axios';
@@ -208,14 +208,19 @@ const AdminPortal = () => {
                 </nav>
 
                 <div className="p-6 mt-auto border-t border-slate-100">
-                    <div className="bg-slate-50 rounded-2xl p-4 flex items-center gap-3">
-                        <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center font-bold text-slate-700 shadow-sm">
-                            {user?.name.charAt(0)}
+                    <div className="bg-slate-50 rounded-2xl p-4">
+                        <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center font-bold text-slate-700 shadow-sm">
+                                {user?.name.charAt(0)}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                                <p className="text-xs font-black text-slate-800 truncate">{user?.name}</p>
+                                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Master Admin</p>
+                            </div>
                         </div>
-                        <div className="flex-1 min-w-0">
-                            <p className="text-xs font-black text-slate-800 truncate">{user?.name}</p>
-                            <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Master Admin</p>
-                        </div>
+                        <button onClick={logout} className="mt-4 w-full flex items-center justify-center gap-2 py-2.5 bg-white border border-slate-200 rounded-xl text-[10px] font-black uppercase tracking-widest text-slate-500 hover:bg-slate-100 transition-all">
+                            <LogOut size={14} aria-hidden="true" /> Sign Out
+                        </button>
                     </div>
                 </div>
             </aside>
@@ -253,6 +258,11 @@ const AdminPortal = () => {
                             <NavItem active={activeTab === 'fairness'} onClick={() => { setActiveTab('fairness'); setMobileSidebar(false); }} icon={<Scale size={20}/>} label="Fairness AIF360" />
                             <NavItem active={activeTab === 'settings'} onClick={() => { setActiveTab('settings'); setMobileSidebar(false); }} icon={<Settings size={20}/>} label="Settings" />
                         </nav>
+                        <div className="p-6 bg-slate-50 border-t border-slate-100">
+                            <button onClick={logout} className="w-full flex items-center justify-center gap-2 py-2.5 bg-white border border-slate-200 rounded-xl text-[10px] font-black uppercase tracking-widest text-slate-500 hover:bg-slate-100 transition-all">
+                                <LogOut size={14} aria-hidden="true" /> Sign Out
+                            </button>
+                        </div>
                     </aside>
                 </div>
             )}
@@ -262,7 +272,7 @@ const AdminPortal = () => {
                     {activeTab === 'overview' && (
                         <motion.div key="overview" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }}>
                             <header className="mb-12">
-                                <h2 className="text-3xl font-black text-slate-900 tracking-tight mb-2">Platform Overview</h2>
+                                <h2 className="text-3xl font-black text-slate-900 tracking-tight mb-2">Admin Dashboard</h2>
                                 <p className="text-slate-500 font-medium">Real-time diagnostics and platform metrics.</p>
                             </header>
 

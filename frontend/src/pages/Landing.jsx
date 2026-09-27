@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence, useScroll, useTransform } from 'framer-motion';
 import axios from 'axios';
 import { useFocusTrap } from '../hooks/useFocusTrap';
@@ -37,6 +37,7 @@ const REG_STEPS = [
 const Landing = () => {
     const { login, API_BASE_URL } = useAuth();
     const navigate = useNavigate();
+    const location = useLocation();
     const [authMode, setAuthMode] = useState(null); // 'login', 'register', 'employer'
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
@@ -55,11 +56,20 @@ const Landing = () => {
     useEffect(() => {
         const params = new URLSearchParams(window.location.search);
         const mode = params.get('mode');
-        if (mode === 'login' || mode === 'register') {
+        const isRegistration = mode === 'register' || mode === 'employer';
+
+        if (mode === 'login' || (isRegistration && location.state?.privacyAcknowledged)) {
             // eslint-disable-next-line react-hooks/set-state-in-effect
             setAuthMode(mode);
+            return;
         }
-    }, []);
+
+        if (isRegistration) {
+            const accountType = mode === 'employer' ? 'employer' : 'candidate';
+            const flow = mode === 'employer' ? 'quick' : 'full';
+            navigate(`/privacy?intent=register&for=${accountType}&flow=${flow}`, { replace: true });
+        }
+    }, [location.state, navigate]);
 
     const { scrollYProgress } = useScroll();
     const opacity = useTransform(scrollYProgress, [0, 0.2], [1, 0]);
@@ -99,6 +109,16 @@ const Landing = () => {
         setRegDisabilities([]);
         setRegEducation([{ level: 'Senior High School', institution: '', degree: '', area: '', start_date: '', end_date: '' }]);
         setRegSkills('');
+    };
+
+    const openCandidateRegistration = () => {
+        resetForms();
+        navigate('/privacy?intent=register&for=candidate&flow=full');
+    };
+
+    const openQuickEmployerRegistration = () => {
+        resetForms();
+        navigate('/privacy?intent=register&for=employer&flow=quick');
     };
 
     const handleLogin = async (e) => {
@@ -221,7 +241,7 @@ const Landing = () => {
                             Log In
                         </button>
                         <button 
-                            onClick={() => { resetForms(); setAuthMode('register'); }}
+                            onClick={openCandidateRegistration}
                             className="px-6 py-2.5 bg-[#0038A8] text-white text-sm font-black rounded-full shadow-lg shadow-blue-200 hover:scale-105 transition-all"
                         >
                             Get Started
@@ -259,7 +279,7 @@ const Landing = () => {
                         </p>
                         <div className="flex flex-col sm:flex-row items-center justify-center gap-6">
                             <button 
-                                onClick={() => { resetForms(); setAuthMode('register'); }}
+                                onClick={openCandidateRegistration}
                                 className="group w-full sm:w-auto bg-[#0038A8] hover:bg-blue-800 text-white px-10 py-5 rounded-[2rem] font-black text-lg shadow-2xl shadow-blue-200 transition-all hover:-translate-y-1 active:scale-95 flex items-center justify-center gap-3"
                             >
                                 Start Your Journey <ArrowRight size={22} className="group-hover:translate-x-1 transition-transform" />
@@ -444,8 +464,15 @@ const Landing = () => {
                             <div>
                                 <h3 className="text-2xl font-black mb-4 tracking-tight">Data Privacy</h3>
                                 <p className="text-slate-500 font-medium">
-                                    Your data is encrypted and handled with the highest standards of security and PWD data privacy laws.
+                                    Learn how UPLIFT handles personal and disability-related information before you create an account.
                                 </p>
+                                <button
+                                    type="button"
+                                    onClick={() => navigate('/privacy')}
+                                    className="mt-5 inline-flex items-center gap-2 text-xs font-black uppercase tracking-widest text-[#0038A8] hover:underline"
+                                >
+                                    Read Privacy Notice <ArrowRight size={16} aria-hidden="true" />
+                                </button>
                             </div>
                         </motion.div>
 
@@ -746,7 +773,7 @@ const Landing = () => {
                                 <div className="text-center mt-10">
                                     <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">
                                         {authMode === 'login' ? (
-                                            <>New here? <button onClick={() => { resetForms(); setAuthMode('register'); }} className="text-[#0038A8] hover:underline">Create Account</button> or <button onClick={() => { resetForms(); setAuthMode('employer'); }} className="text-[#CE1126] hover:underline">Apply as Employer</button></>
+                                            <>New here? <button onClick={openCandidateRegistration} className="text-[#0038A8] hover:underline">Create Account</button> or <button onClick={openQuickEmployerRegistration} className="text-[#CE1126] hover:underline">Apply as Employer</button></>
                                         ) : (
                                             <>Already joined? <button onClick={() => { resetForms(); setAuthMode('login'); }} className="text-[#0038A8] hover:underline">Log In</button></>
                                         )}

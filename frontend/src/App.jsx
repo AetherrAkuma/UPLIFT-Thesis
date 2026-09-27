@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { AccessibilityProvider } from './context/AccessibilityContext';
 import Landing from './pages/Landing';
@@ -14,6 +14,7 @@ import AdminPortal from './pages/AdminPortal';
 import EmployerLanding from './pages/EmployerLanding';
 import EmployerLogin from './pages/EmployerLogin';
 import EmployerOnboarding from './pages/EmployerOnboarding';
+import DataPrivacyAct from './pages/DataPrivacyAct';
 import Layout from './components/Layout';
 import { ToastProvider } from './context/ToastContext';
 
@@ -24,6 +25,24 @@ const ProtectedRoute = ({ children, allowedRoles }) => {
   if (!user) return <Navigate to="/" />;
   if (allowedRoles && !allowedRoles.includes(user.role)) return <Navigate to="/" />;
   
+  return children;
+};
+
+const PrivacyProtectedRoute = ({ children, accountType, flow }) => {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const hasAcknowledged = location.state?.privacyAcknowledged === true;
+
+  useEffect(() => {
+    if (!hasAcknowledged) {
+      navigate(`/privacy?intent=register&for=${accountType}&flow=${flow}`, { replace: true });
+    }
+  }, [accountType, flow, hasAcknowledged, navigate]);
+
+  if (!hasAcknowledged) {
+    return <div className="min-h-screen flex items-center justify-center">Preparing account registration...</div>;
+  }
+
   return children;
 };
 
@@ -109,9 +128,17 @@ const AppContent = () => {
               </ProtectedRoute>
             } 
           />
+          <Route path="/privacy" element={<DataPrivacyAct />} />
           <Route path="/employer/welcome" element={<EmployerLanding />} />
           <Route path="/employer/login" element={<EmployerLogin />} />
-          <Route path="/employer/register" element={<EmployerOnboarding />} />
+          <Route
+            path="/employer/register"
+            element={
+              <PrivacyProtectedRoute accountType="employer" flow="full">
+                <EmployerOnboarding />
+              </PrivacyProtectedRoute>
+            }
+          />
           <Route 
             path="/admin" 
             element={

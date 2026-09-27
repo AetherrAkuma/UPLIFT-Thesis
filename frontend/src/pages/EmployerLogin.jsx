@@ -131,7 +131,7 @@ const EmployerLogin = () => {
 
                             <p className="text-center text-xs font-bold text-slate-400">
                                 Don't have a partner account? 
-                                <button type="button" onClick={() => navigate('/employer/register')} className="text-[#0038A8] ml-2 hover:underline">Apply Now</button>
+                                <button type="button" onClick={() => navigate('/privacy?intent=register&for=employer&flow=full')} className="text-[#0038A8] ml-2 hover:underline">Apply Now</button>
                             </p>
                         </form>
                     </motion.div>

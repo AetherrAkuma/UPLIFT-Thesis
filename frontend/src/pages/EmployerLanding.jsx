@@ -34,7 +34,7 @@ const EmployerLanding = () => {
                             Log In
                         </button>
                         <button 
-                            onClick={() => navigate('/employer/register')}
+                            onClick={() => navigate('/privacy?intent=register&for=employer&flow=full')}
                             className="px-6 py-3 bg-[#0038A8] text-white rounded-2xl text-[11px] font-black uppercase tracking-[0.1em] hover:bg-blue-800 transition-all shadow-xl shadow-blue-100"
                         >
                             Become a Partner
@@ -63,7 +63,7 @@ const EmployerLanding = () => {
                         </p>
                         <div className="flex flex-col sm:flex-row gap-4">
                             <button 
-                                onClick={() => navigate('/employer/register')}
+                                onClick={() => navigate('/privacy?intent=register&for=employer&flow=full')}
                                 className="group px-8 py-5 bg-slate-900 text-white rounded-3xl text-sm font-black uppercase tracking-widest hover:bg-[#0038A8] transition-all flex items-center justify-center gap-3 shadow-2xl shadow-slate-200"
                             >
                                 Start 3-Step Onboarding <ChevronRight size={18} className="group-hover:translate-x-1 transition-transform" />
@@ -169,7 +169,7 @@ const EmployerLanding = () => {
                     </div>
                     <p className="text-sm font-bold text-slate-400">© 2026 UPLIFT Thesis Project. NCDA Authorized Portal.</p>
                     <div className="flex gap-8">
-                        <a href="#" className="text-xs font-black uppercase tracking-widest text-slate-500">Privacy</a>
+                        <button type="button" onClick={() => navigate('/privacy')} className="text-xs font-black uppercase tracking-widest text-slate-500">Privacy</button>
                         <a href="#" className="text-xs font-black uppercase tracking-widest text-slate-500">Terms</a>
                         <a href="#" className="text-xs font-black uppercase tracking-widest text-slate-500">Support</a>
                     </div>

@@ -56,7 +56,7 @@ const Navbar = () => {
                                     Log in
                                 </button>
                                 <button 
-                                    onClick={() => navigate('/?mode=register')}
+                                    onClick={() => navigate('/privacy?intent=register&for=candidate')}
                                     className="bg-blue-600 hover:bg-blue-700 text-white font-medium text-sm px-5 py-2 rounded-lg transition-colors shadow-sm" 
                                     aria-label="Create a new account"
                                 >

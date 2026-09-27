@@ -1,6 +1,6 @@
 import Navbar from './Navbar';
 import AccessibilityFab from './AccessibilityFab';
-import { useLocation } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 
 const Layout = ({ children }) => {
     const location = useLocation();
@@ -45,7 +45,7 @@ const Layout = ({ children }) => {
                     <div className="border-t border-slate-100 mt-12 pt-8 flex flex-col md:flex-row justify-between items-center gap-4">
                         <p className="text-slate-400 text-xs">© 2026 UPLIFT Platform. All rights reserved.</p>
                         <div className="flex gap-6">
-                            <a href="#" className="text-slate-400 hover:text-slate-600 text-xs">Privacy Policy</a>
+                            <Link to="/privacy" className="text-slate-400 hover:text-slate-600 text-xs">Privacy Policy</Link>
                             <a href="#" className="text-slate-400 hover:text-slate-600 text-xs">Terms of Service</a>
                         </div>
                     </div>
