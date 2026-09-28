@@ -118,10 +118,10 @@ const ApplyPage = () => {
     if (!job) return null;
 
     return (
-        <div className="min-h-screen bg-[#F8FAFC]">
+        <div className="min-h-screen bg-[#F8FAFC] w-full max-w-full overflow-x-hidden min-w-0">
             {/* Header */}
-            <div className="bg-white border-b border-slate-100 sticky top-0 z-30">
-                <div className="max-w-5xl mx-auto px-6 h-20 flex items-center justify-between">
+            <div className="bg-white border-b border-slate-100 sticky top-0 z-30 w-full">
+                <div className="max-w-5xl mx-auto px-4 sm:px-6 h-16 sm:h-20 flex items-center justify-between w-full min-w-0">
                     <button onClick={() => navigate(-1)} className="flex items-center gap-2 text-slate-500 hover:text-blue-600 font-bold transition-colors group">
                         <ArrowLeft size={20} className="group-hover:-translate-x-1 transition-transform" />
                         Back
@@ -132,25 +132,25 @@ const ApplyPage = () => {
                 </div>
             </div>
 
-            <div className="max-w-4xl mx-auto px-6 py-12 space-y-10">
+            <div className="max-w-4xl mx-auto px-4 sm:px-6 py-6 sm:py-12 space-y-6 sm:space-y-10 w-full min-w-0">
                 {/* Job summary bar */}
-                <div className="bg-white rounded-[2.5rem] p-8 border border-slate-100 shadow-sm flex items-center justify-between">
-                    <div className="flex items-center gap-6">
-                        <div className="w-16 h-16 bg-blue-50 rounded-2xl flex items-center justify-center text-2xl font-black text-blue-600">
+                <div className="bg-white rounded-3xl sm:rounded-[2.5rem] p-4 sm:p-8 border border-slate-100 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4 w-full min-w-0">
+                    <div className="flex items-center gap-4 sm:gap-6 min-w-0">
+                        <div className="w-12 h-12 sm:w-16 sm:h-16 bg-blue-50 rounded-xl sm:rounded-2xl flex items-center justify-center text-xl sm:text-2xl font-black text-blue-600 shrink-0">
                             {job.employer_name?.charAt(0)}
                         </div>
-                        <div>
-                            <h1 className="text-2xl font-black text-slate-900">{job.job_title}</h1>
-                            <div className="flex items-center gap-3 text-slate-500 font-bold text-sm mt-1">
-                                <span className="flex items-center gap-1.5"><Building2 size={16}/> {job.employer_name}</span>
-                                <span className="w-1 h-1 rounded-full bg-slate-300" />
-                                <span className="flex items-center gap-1.5"><MapPin size={16}/> {job.location}</span>
+                        <div className="min-w-0 flex-1">
+                            <h1 className="text-xl sm:text-2xl font-black text-slate-900 break-words">{job.job_title}</h1>
+                            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-slate-500 font-bold text-xs sm:text-sm mt-1">
+                                <span className="flex items-center gap-1.5"><Building2 size={15}/> {job.employer_name}</span>
+                                <span className="hidden sm:inline-block w-1 h-1 rounded-full bg-slate-300" />
+                                <span className="flex items-center gap-1.5"><MapPin size={15}/> {job.location}</span>
                             </div>
                         </div>
                     </div>
-                    <div className="hidden sm:flex flex-wrap gap-2">
+                    <div className="flex flex-wrap gap-2">
                         <span className="px-3 py-1 bg-blue-50 text-blue-600 rounded-lg text-[9px] font-black uppercase tracking-widest">{job.job_type}</span>
-                        <span className="px-3 py-1 bg-emerald-50 text-emerald-600 rounded-lg text-[9px] font-black uppercase tracking-widest">{job.salary_range}</span>
+                        {job.salary_range && <span className="px-3 py-1 bg-emerald-50 text-emerald-600 rounded-lg text-[9px] font-black uppercase tracking-widest">{job.salary_range}</span>}
                     </div>
                 </div>
 

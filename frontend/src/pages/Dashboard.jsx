@@ -81,14 +81,14 @@ const ProfileProgressCard = ({ user, onEdit }) => {
     const coreComplete = coreDone === core.length;
 
     return (
-        <div className="mb-16 bg-white rounded-[2.5rem] p-8 shadow-xl shadow-slate-200/50 border border-slate-100">
-            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
-                <div className="flex-1">
-                    <div className="flex items-center justify-between mb-3">
+        <div className="w-full max-w-full mb-8 sm:mb-16 bg-white rounded-3xl sm:rounded-[2.5rem] p-4 sm:p-8 shadow-xl shadow-slate-200/50 border border-slate-100 min-w-0 overflow-hidden">
+            <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4 sm:gap-6 min-w-0">
+                <div className="flex-1 w-full min-w-0">
+                    <div className="flex items-center justify-between mb-3 min-w-0">
                         <h3 className="text-xs font-black uppercase tracking-widest text-slate-400">Profile Strength</h3>
-                        <span className="text-2xl font-black text-[#0038A8]">{pct}%</span>
+                        <span className="text-xl sm:text-2xl font-black text-[#0038A8] shrink-0 ml-2">{pct}%</span>
                     </div>
-                    <div className="h-3.5 bg-slate-50 rounded-full overflow-hidden border border-slate-100 p-0.5">
+                    <div className="h-3.5 bg-slate-50 rounded-full overflow-hidden border border-slate-100 p-0.5 w-full">
                         <motion.div
                             initial={{ width: 0 }}
                             animate={{ width: `${pct}%` }}
@@ -96,20 +96,21 @@ const ProfileProgressCard = ({ user, onEdit }) => {
                             className={`h-full rounded-full shadow-sm ${coreComplete ? 'bg-emerald-500' : 'bg-[#0038A8]'}`}
                         />
                     </div>
-                    <div className="mt-4 flex flex-wrap gap-2">
+                    <div className="mt-4 flex flex-wrap gap-2 w-full">
                         {core.map(c => (
-                            <span key={c.label} className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest border ${c.done ? 'bg-emerald-50 text-emerald-700 border-emerald-100' : 'bg-amber-50 text-amber-700 border-amber-100'}`}>
-                                {c.done ? <CheckCircle2 size={11} /> : <AlertCircle size={11} />} {c.label}
+                            <span key={c.label} className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[9px] font-black uppercase tracking-wider sm:tracking-widest border max-w-full ${c.done ? 'bg-emerald-50 text-emerald-700 border-emerald-100' : 'bg-amber-50 text-amber-700 border-amber-100'}`}>
+                                {c.done ? <CheckCircle2 size={11} className="shrink-0" /> : <AlertCircle size={11} className="shrink-0" />} 
+                                <span className="truncate">{c.label}</span>
                             </span>
                         ))}
-                        <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest border bg-slate-50 text-slate-500 border-slate-100">
+                        <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[9px] font-black uppercase tracking-wider sm:tracking-widest border bg-slate-50 text-slate-500 border-slate-100 shrink-0">
                             + {optDone}/{optional.length} optional details
                         </span>
                     </div>
                 </div>
                 <button
                     onClick={onEdit}
-                    className="flex items-center gap-2 px-6 py-3 bg-[#0038A8] text-white rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-blue-100 hover:bg-blue-800 hover:-translate-y-0.5 transition-all"
+                    className="w-full md:w-auto shrink-0 justify-center flex items-center gap-2 px-6 py-3.5 bg-[#0038A8] text-white rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-blue-100 hover:bg-blue-800 transition-all"
                 >
                     {coreComplete ? 'Refine Profile' : 'Complete Profile'} <ArrowRight size={14} />
                 </button>
@@ -124,12 +125,12 @@ const ProfileProgressCard = ({ user, onEdit }) => {
 };
 
 const ScoreBar = ({ label, score, color }) => (
-    <div className="flex flex-col gap-2">
-        <div className="flex justify-between items-center px-1">
-            <span className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em]">{label}</span>
-            <span className="text-xs font-black text-slate-800">{score.toFixed(0)}%</span>
+    <div className="flex flex-col gap-2 min-w-0 w-full">
+        <div className="flex justify-between items-center px-1 min-w-0 gap-2">
+            <span className="text-[9px] font-black text-slate-400 uppercase tracking-wider truncate flex-1">{label}</span>
+            <span className="text-xs font-black text-slate-800 shrink-0">{score.toFixed(0)}%</span>
         </div>
-        <div className="h-3 bg-slate-50 rounded-full overflow-hidden border border-slate-100 p-0.5">
+        <div className="h-3 bg-slate-50 rounded-full overflow-hidden border border-slate-100 p-0.5 w-full">
             <motion.div 
                 initial={{ width: 0 }}
                 animate={{ width: `${score}%` }}
@@ -321,23 +322,23 @@ const FairnessBadge = ({ fairness, match }) => {
     const report = fairness.group_report;
     const hasCorrection = match?.metrics?.fairness_adjustment != null;
     return (
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 mt-1 min-w-0 max-w-full">
             {hasCorrection && (
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-emerald-50 text-emerald-700 rounded-full text-[9px] font-black uppercase tracking-widest border border-emerald-100">
-                    <Scale size={10} />
-                    {match.metrics.fairness_adjustment > 0 ? '+' : ''}{match.metrics.fairness_adjustment}% Adj
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-emerald-50 text-emerald-700 rounded-full text-[9px] font-black uppercase tracking-wider border border-emerald-100 max-w-full">
+                    <Scale size={10} className="shrink-0" />
+                    <span>{match.metrics.fairness_adjustment > 0 ? '+' : ''}{match.metrics.fairness_adjustment}% Adj</span>
                 </span>
             )}
             {reweighing && !hasCorrection && (
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-emerald-50 text-emerald-700 rounded-full text-[9px] font-black uppercase tracking-widest border border-emerald-100">
-                    <Scale size={10} />
-                    Fairness {reweighing.correction_applied > 0 ? '+' : ''}{reweighing.correction_applied}%
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-emerald-50 text-emerald-700 rounded-full text-[9px] font-black uppercase tracking-wider border border-emerald-100 max-w-full">
+                    <Scale size={10} className="shrink-0" />
+                    <span>Fairness {reweighing.correction_applied > 0 ? '+' : ''}{reweighing.correction_applied}%</span>
                 </span>
             )}
             {report && report.system_group_averages && Object.keys(report.system_group_averages).length > 0 && (
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-indigo-50 text-indigo-700 rounded-full text-[9px] font-black uppercase tracking-widest border border-indigo-100">
-                    <TrendingUp size={10} />
-                    {report.your_disability}: {report.your_avg}%
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-indigo-50 text-indigo-700 rounded-full text-[9px] font-black uppercase tracking-wider border border-indigo-100 max-w-full">
+                    <TrendingUp size={10} className="shrink-0" />
+                    <span className="truncate max-w-[200px] sm:max-w-xs">{report.your_disability}: {report.your_avg}%</span>
                 </span>
             )}
         </div>
@@ -405,7 +406,7 @@ const AIAnalysisSidebar = ({ job, data, loading, onClose, fairness }) => {
             animate={{ x: 0 }}
             exit={{ x: "100%" }}
             transition={{ type: "spring", damping: 25, stiffness: 200 }}
-            className="fixed top-0 right-0 w-full md:w-[450px] h-full bg-white shadow-2xl z-[100] flex flex-col border-l border-slate-100"
+            className="fixed top-0 right-0 w-full md:w-[450px] max-w-full h-full bg-white shadow-2xl z-[100] flex flex-col border-l border-slate-100"
         >
             <div className="p-8 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
                 <div className="flex items-center gap-4">
@@ -606,35 +607,35 @@ const AIAnalysisSidebar = ({ job, data, loading, onClose, fairness }) => {
 const MatchCard = ({ match, isOpen, onToggle, onAnalyze, fairness, showAiMatch }) => {
     const navigate = useNavigate();
     return (
-        <div className="bg-white rounded-[2rem] border border-slate-100 shadow-sm hover:shadow-md transition-all overflow-hidden group">
-            <div className="p-6 md:p-8">
-                <div className="flex flex-col md:flex-row justify-between gap-6">
-                    <div className="flex gap-6">
-                        <div className="w-16 h-16 bg-slate-50 rounded-2xl border border-slate-100 flex items-center justify-center text-slate-400 text-2xl font-black shrink-0">
+        <div className="w-full max-w-full min-w-0 bg-white rounded-2xl sm:rounded-[2rem] border border-slate-100 shadow-sm hover:shadow-md transition-all overflow-hidden group">
+            <div className="p-4 sm:p-6 md:p-8 min-w-0 w-full">
+                <div className="flex flex-col md:flex-row justify-between gap-4 sm:gap-6 min-w-0 w-full">
+                    <div className="flex gap-3 sm:gap-6 min-w-0 flex-1">
+                        <div className="w-12 h-12 sm:w-16 sm:h-16 bg-slate-50 rounded-xl sm:rounded-2xl border border-slate-100 flex items-center justify-center text-slate-400 text-xl sm:text-2xl font-black shrink-0">
                             {match.employer.charAt(0)}
                         </div>
-                        <div>
-                            <div className="flex items-center gap-3 mb-1">
-                                <h3 className="text-xl font-black text-slate-800">{match.job_title || match.title}</h3>
+                        <div className="min-w-0 flex-1">
+                            <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 mb-1">
+                                <h3 className="text-base sm:text-xl font-black text-slate-800 break-words">{match.job_title || match.title}</h3>
                                 {showAiMatch && (
-                                    <span className="px-2.5 py-1 bg-blue-50 text-blue-600 rounded-full text-[10px] font-black uppercase tracking-widest border border-blue-100">
+                                    <span className="px-2 sm:px-2.5 py-0.5 sm:py-1 bg-blue-50 text-blue-600 rounded-full text-[9px] sm:text-[10px] font-black uppercase tracking-widest border border-blue-100 shrink-0">
                                         {match.metrics.final_accessibility_percentage.toFixed(0)}% Fit
                                     </span>
                                 )}
                                 {match.suitability_index && (
-                                    <span className="px-2.5 py-1 bg-indigo-50 text-indigo-700 rounded-full text-[10px] font-black uppercase tracking-widest border border-indigo-100" title={match.suitability_index.definition}>
+                                    <span className="px-2 sm:px-2.5 py-0.5 sm:py-1 bg-indigo-50 text-indigo-700 rounded-full text-[9px] sm:text-[10px] font-black uppercase tracking-widest border border-indigo-100 shrink-0" title={match.suitability_index.definition}>
                                         Index {match.suitability_index.index}%
                                     </span>
                                 )}
                             </div>
-                            <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm font-medium text-slate-500">
-                                <span className="flex items-center gap-1.5"><Building2 size={14} className="text-slate-300"/> {match.employer}</span>
-                                <span className="flex items-center gap-1.5"><SlidersHorizontal size={14} className="text-slate-300"/> {match.job_type || 'Full-time'}</span>
+                            <div className="flex flex-wrap items-center gap-x-3 sm:gap-x-4 gap-y-1 text-xs sm:text-sm font-medium text-slate-500">
+                                <span className="flex items-center gap-1"><Building2 size={13} className="text-slate-300"/> {match.employer}</span>
+                                <span className="flex items-center gap-1"><SlidersHorizontal size={13} className="text-slate-300"/> {match.job_type || 'Full-time'}</span>
                             </div>
                             {showAiMatch && <FairnessBadge fairness={fairness} match={match} />}
                         </div>
                     </div>
-                    <div className="flex flex-col items-end gap-4 self-end md:self-start">
+                    <div className="flex flex-row md:flex-col items-center md:items-end justify-between md:justify-start gap-2.5 sm:gap-4 w-full md:w-auto pt-3 md:pt-0 border-t md:border-t-0 border-slate-100">
                         {showAiMatch ? (
                             <div className="text-right hidden sm:block">
                                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Suitability Score</p>
@@ -649,15 +650,15 @@ const MatchCard = ({ match, isOpen, onToggle, onAnalyze, fairness, showAiMatch }
                             {showAiMatch && (
                                 <button 
                                     onClick={(e) => { e.stopPropagation(); onAnalyze(); }}
-                                    className="flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-600 rounded-xl text-[10px] font-black uppercase tracking-widest border border-blue-100 hover:bg-blue-600 hover:text-white transition-all shadow-sm"
+                                    className="flex items-center gap-1.5 px-3 sm:px-4 py-2 bg-blue-50 text-blue-600 rounded-xl text-[9px] sm:text-[10px] font-black uppercase tracking-widest border border-blue-100 hover:bg-blue-600 hover:text-white transition-all shadow-sm"
                                     aria-label="Why this job matched your profile"
                                 >
-                                    <Sparkles size={14} aria-hidden="true" /> Why this matched?
+                                    <Sparkles size={13} aria-hidden="true" /> Why matched?
                                 </button>
                             )}
                             <button 
                                 onClick={onToggle}
-                                className="w-10 h-10 rounded-full bg-slate-50 flex items-center justify-center hover:bg-blue-600 hover:text-white transition-all transform active:scale-95 group/btn"
+                                className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-slate-50 flex items-center justify-center hover:bg-blue-600 hover:text-white transition-all transform active:scale-95 group/btn"
                                 aria-expanded={isOpen}
                                 aria-label={isOpen ? "Collapse details" : "Expand details"}
                             >
@@ -669,10 +670,10 @@ const MatchCard = ({ match, isOpen, onToggle, onAnalyze, fairness, showAiMatch }
                     </div>
                 </div>
 
-                <div className="mt-6 pt-6 border-t border-slate-50">
+                <div className="mt-5 sm:mt-6 pt-5 sm:pt-6 border-t border-slate-50">
                     {showAiMatch && (
                         <>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-12 gap-y-4 mb-6">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 sm:gap-x-12 gap-y-3 sm:gap-y-4 mb-6">
                                 <ScoreBar label="Skill Relevance" score={match.metrics.skill_score} color="bg-blue-500" />
                                 <ScoreBar label="Safety Alignment" score={match.metrics.safety_score} color="bg-indigo-500" />
                                 <ScoreBar label="Stamina & Pacing" score={match.metrics.stamina_score} color="bg-emerald-500" />
@@ -685,16 +686,16 @@ const MatchCard = ({ match, isOpen, onToggle, onAnalyze, fairness, showAiMatch }
                             </p>
 
                             <p className="text-xs text-slate-500 italic flex-1 flex items-center gap-2 mb-6">
-                                <Bot size={14} className="text-blue-400" />
-                                {match.ai_insights?.split('.')[0] || "Personalized AI analysis available below"}.
+                                <Bot size={14} className="text-blue-400 shrink-0" />
+                                <span>{match.ai_insights?.split('.')[0] || "Personalized AI analysis available below"}.</span>
                             </p>
                         </>
                     )}
 
-                    <div className="flex items-center justify-end gap-3">
+                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-end gap-2.5 sm:gap-3">
                         <button 
                             onClick={() => navigate(`/job/${match.job_id}`)}
-                            className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-5 py-2.5 rounded-xl text-xs font-bold transition-all shrink-0 flex items-center gap-2 border border-slate-200"
+                            className="w-full sm:w-auto bg-slate-100 hover:bg-slate-200 text-slate-700 px-5 py-3 sm:py-2.5 rounded-xl text-xs font-bold transition-all justify-center flex items-center gap-2 border border-slate-200"
                             aria-label={`See more details about ${match.job_title || match.title} at ${match.employer}`}
                         >
                             See More
@@ -702,7 +703,7 @@ const MatchCard = ({ match, isOpen, onToggle, onAnalyze, fairness, showAiMatch }
                         </button>
                         <button 
                             onClick={() => navigate(`/apply/${match.job_id}`)}
-                            className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded-xl text-xs font-bold transition-all shrink-0 shadow-md shadow-blue-100 flex items-center gap-2"
+                            className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 sm:py-2.5 rounded-xl text-xs font-bold transition-all justify-center shadow-md shadow-blue-100 flex items-center gap-2"
                             aria-label={`Apply directly for ${match.job_title || match.title} at ${match.employer}`}
                         >
                             Apply Now
@@ -892,7 +893,7 @@ const Dashboard = () => {
     };
 
     return (
-        <div className="max-w-5xl mx-auto px-4 py-12 relative">
+        <div className="w-full max-w-5xl mx-auto px-3 sm:px-4 py-8 sm:py-12 relative min-w-0 overflow-x-hidden">
             <AnimatePresence>
                 {analysisJob && (
                     <AIAnalysisSidebar 
@@ -905,14 +906,14 @@ const Dashboard = () => {
                 )}
             </AnimatePresence>
 
-            <header className="mb-12 flex justify-between items-end">
+            <header className="mb-8 sm:mb-12 flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4">
                 <div>
-                    <h1 className="text-4xl font-black text-slate-900 mb-2">Hello, {user?.name.split(' ')[0]} 👋</h1>
-                    <p className="text-slate-500">Find jobs that truly fit your unique capabilities.</p>
+                    <h1 className="text-2xl sm:text-4xl font-black text-slate-900 mb-1 sm:mb-2">Hello, {user?.name.split(' ')[0]} 👋</h1>
+                    <p className="text-sm sm:text-base text-slate-500 font-medium">Find jobs that truly fit your unique capabilities.</p>
                 </div>
                 <button 
                     onClick={() => navigate('/applications')}
-                    className="flex items-center gap-2 px-6 py-3 bg-white border border-slate-100 rounded-2xl text-xs font-black text-slate-600 uppercase tracking-widest hover:bg-slate-50 transition-all shadow-sm group"
+                    className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-3.5 bg-white border border-slate-200 rounded-2xl text-xs font-black text-slate-700 uppercase tracking-widest hover:bg-slate-50 transition-all shadow-sm group"
                 >
                     <Briefcase size={16} className="text-blue-500 group-hover:scale-110 transition-transform" />
                     My Applications
@@ -921,43 +922,43 @@ const Dashboard = () => {
 
             <ProfileProgressCard user={user} onEdit={() => navigate('/profile')} />
 
-            <div className="relative mb-16">
-                <div className="bg-white rounded-[3.5rem] p-6 md:p-12 shadow-2xl shadow-slate-200/50 border border-slate-100 overflow-hidden relative">
-                    <div className="absolute top-0 right-0 p-6 md:p-12 opacity-[0.03] pointer-events-none">
+            <div className="relative mb-8 sm:mb-16 w-full max-w-full min-w-0">
+                <div className="bg-white rounded-3xl sm:rounded-[2.5rem] lg:rounded-[3.5rem] p-4 sm:p-8 lg:p-12 shadow-xl sm:shadow-2xl shadow-slate-200/50 border border-slate-100 overflow-hidden relative w-full max-w-full min-w-0">
+                    <div className="absolute top-0 right-0 p-6 md:p-12 opacity-[0.03] pointer-events-none hidden sm:block">
                         <Bot size={240} />
                     </div>
-                    <div className="relative z-10 max-w-2xl">
-                        <div className="inline-flex items-center gap-2 px-4 py-2 bg-blue-50 rounded-full text-blue-600 text-[10px] font-black uppercase tracking-widest mb-6 border border-blue-100 transition-all">
+                    <div className="relative z-10 w-full max-w-2xl min-w-0">
+                        <div className="inline-flex items-center gap-2 px-3.5 py-1.5 sm:px-4 sm:py-2 bg-blue-50 rounded-full text-blue-600 text-[10px] font-black uppercase tracking-widest mb-4 sm:mb-6 border border-blue-100 transition-all max-w-full">
                             {useProfileContext ? (
-                                <><Sparkles size={12} className="animate-pulse text-[#0038A8]" /> AI-Powered Career Matching</>
+                                <><Sparkles size={12} className="animate-pulse text-[#0038A8] shrink-0" /> <span className="truncate">AI-Powered Career Matching</span></>
                             ) : (
-                                <><Search size={12} className="text-[#CE1126]" /> Manual Keyword Search</>
+                                <><Search size={12} className="text-[#CE1126] shrink-0" /> <span className="truncate">Manual Keyword Search</span></>
                             )}
                         </div>
-                        <h2 className="text-4xl font-black text-slate-800 leading-tight mb-4 transition-all">
+                        <h2 className="text-2xl sm:text-3xl lg:text-4xl font-black text-slate-800 leading-tight mb-3 sm:mb-4 transition-all break-words">
                             {useProfileContext ? (
                                 <>Ready to discover your <span className="text-blue-600">perfect role?</span></>
                             ) : (
                                 <>Search Open <span className="text-blue-600">Opportunities</span></>
                             )}
                         </h2>
-                        <p className="text-slate-500 text-lg font-medium mb-10 leading-relaxed transition-all">
+                        <p className="text-slate-500 text-sm sm:text-base lg:text-lg font-medium mb-6 sm:mb-10 leading-relaxed transition-all break-words">
                             {useProfileContext ? (
                                 "Our AI engine uses your Progressive Profile (Skills, Education, and Physical Capabilities) to find the most sustainable and safe job opportunities for you."
                             ) : (
                                 "Perform a direct, manual keyword search across all approved postings. Toggle 'Enable AI suitability match' below to activate semantic AI matching."
                             )}
                         </p>
-                        <div className="w-full mt-8">
-                            <form onSubmit={handleSearch} className="w-full space-y-6">
-                                <div className="flex flex-col sm:flex-row items-stretch gap-4">
-                                    <div className="relative flex-1">
+                        <div className="w-full mt-6 sm:mt-8 min-w-0">
+                            <form onSubmit={handleSearch} className="w-full space-y-4 sm:space-y-6 min-w-0">
+                                <div className="flex flex-col sm:flex-row items-stretch gap-3 sm:gap-4 w-full min-w-0">
+                                    <div className="relative flex-1 min-w-0 w-full">
                                         <input 
                                             type="text"
                                             value={searchQuery}
                                             onChange={(e) => setSearchQuery(e.target.value)}
                                             placeholder="Search by keywords, title, location, or skills..."
-                                            className="w-full bg-slate-50 border-2 border-slate-100 rounded-[2rem] px-8 py-5 pr-14 text-slate-700 placeholder:text-slate-350 focus:border-blue-500 focus:bg-white focus:outline-none transition-all text-sm font-bold shadow-inner"
+                                            className="w-full min-w-0 bg-slate-50 border-2 border-slate-100 rounded-2xl sm:rounded-[2rem] px-4 sm:px-8 py-3.5 sm:py-5 pr-10 sm:pr-14 text-slate-700 placeholder:text-slate-400 focus:border-blue-500 focus:bg-white focus:outline-none transition-all text-xs sm:text-sm font-bold shadow-inner"
                                             disabled={searching}
                                         />
                                         {searchQuery && (
@@ -966,7 +967,7 @@ const Dashboard = () => {
                                                 onClick={() => {
                                                     setSearchQuery('');
                                                 }}
-                                                className="absolute right-5 top-1/2 -translate-y-1/2 p-1.5 rounded-full hover:bg-slate-200 text-slate-400 hover:text-slate-600 transition-colors"
+                                                className="absolute right-4 sm:right-5 top-1/2 -translate-y-1/2 p-1.5 rounded-full hover:bg-slate-200 text-slate-400 hover:text-slate-600 transition-colors"
                                                 title="Clear search"
                                             >
                                                 <X size={16} />
@@ -976,7 +977,7 @@ const Dashboard = () => {
                                     <button 
                                         type="submit"
                                         disabled={searching}
-                                        className="px-10 py-5 bg-blue-600 hover:bg-blue-700 text-white rounded-[2rem] font-black text-sm uppercase tracking-widest shadow-xl shadow-blue-100 transition-all hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-50 flex items-center justify-center gap-2"
+                                        className="w-full sm:w-auto px-8 sm:px-10 py-3.5 sm:py-5 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl sm:rounded-[2rem] font-black text-xs sm:text-sm uppercase tracking-widest shadow-xl shadow-blue-100 transition-all hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-50 flex items-center justify-center gap-2"
                                         aria-label={searching ? "Searching..." : "Search jobs"}
                                     >
                                         {searching ? (
@@ -991,7 +992,7 @@ const Dashboard = () => {
                                     </button>
                                 </div>
                                 
-                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pl-2">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 pl-0 sm:pl-2">
                                     {/* Job Type Select */}
                                     <div className="flex flex-col gap-1.5">
                                         <label className="text-[9px] font-black uppercase tracking-widest text-slate-400">Job Type</label>
@@ -1052,8 +1053,8 @@ const Dashboard = () => {
                                     </div>
                                 </div>
                                 
-                                <div className="flex items-center gap-6 pl-4 pt-2">
-                                    <label className="relative inline-flex items-center cursor-pointer">
+                                <div className="flex items-start sm:items-center gap-3 pt-2 w-full">
+                                    <label className="relative flex items-start sm:items-center gap-2.5 sm:gap-3 cursor-pointer w-full">
                                         <input 
                                             type="checkbox" 
                                             checked={useProfileContext}
@@ -1065,8 +1066,8 @@ const Dashboard = () => {
                                             className="sr-only peer"
                                             disabled={searching}
                                         />
-                                        <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
-                                        <span className="ml-3 text-[10px] font-black uppercase tracking-widest text-slate-400">Enable AI suitability match (pacing & capability analysis)</span>
+                                        <div className="w-9 h-5 shrink-0 bg-slate-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600 mt-0.5 sm:mt-0"></div>
+                                        <span className="text-[10px] font-black uppercase tracking-wider text-slate-500 leading-snug flex-1 break-words">Enable AI suitability match (pacing & capability analysis)</span>
                                     </label>
                                 </div>
                             </form>

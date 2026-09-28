@@ -270,7 +270,7 @@ const EmployerPortal = () => {
             </div>
 
             {/* Main Content */}
-            <main className="lg:ml-80 flex-1 p-6 sm:p-8 lg:p-12 pt-20 lg:pt-0">
+            <main className="lg:ml-80 flex-1 min-w-0 w-full p-4 sm:p-8 lg:p-12 pt-20 lg:pt-8">
                 <AnimatePresence mode="wait">
                     {user?.status === 'rejected' ? (
                         isEditingRejection ? (

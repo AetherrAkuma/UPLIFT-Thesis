@@ -386,8 +386,8 @@ const Profile = () => {
                 )}
             </AnimatePresence>
 
-            <div className="max-w-[1400px] mx-auto px-6 pt-12">
-                <div className="grid grid-cols-1 lg:grid-cols-12 gap-12">
+            <div className="max-w-[1400px] mx-auto px-4 sm:px-6 pt-6 sm:pt-12">
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 sm:gap-8 lg:gap-12">
                     
                     {/* Sidebar: Progressive Navigator */}
                     <div className="lg:col-span-3">
@@ -508,14 +508,14 @@ const Profile = () => {
 
                     {/* Main Content: Progressive Accordion */}
                     <div className="lg:col-span-9 space-y-4">
-                        <div className="flex items-center justify-between mb-8 px-4">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 sm:mb-8 px-2 sm:px-4">
                             <div>
-                                <h1 className="text-4xl font-black text-slate-800 tracking-tight">Complete your Profile</h1>
-                                <p className="text-slate-400 font-medium mt-2">Personalize your data for better AI job matching.</p>
+                                <h1 className="text-2xl sm:text-4xl font-black text-slate-800 tracking-tight">Complete your Profile</h1>
+                                <p className="text-slate-400 font-medium text-xs sm:text-sm mt-1 sm:mt-2">Personalize your data for better AI job matching.</p>
                             </div>
                             <button 
                                 onClick={() => navigate('/dashboard')}
-                                className="flex items-center gap-2 px-6 py-3 rounded-2xl font-bold text-xs text-slate-500 hover:bg-slate-100 transition-all border border-slate-200"
+                                className="w-full sm:w-auto justify-center flex items-center gap-2 px-5 py-3 rounded-2xl font-bold text-xs text-slate-600 hover:bg-slate-100 transition-all border border-slate-200"
                             >
                                 <LayoutDashboard size={16} /> Exit to Dashboard
                             </button>

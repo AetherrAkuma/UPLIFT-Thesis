@@ -267,7 +267,7 @@ const AdminPortal = () => {
                 </div>
             )}
 
-            <main className="flex-1 lg:ml-72 p-6 sm:p-8 lg:p-12 pt-20 lg:pt-0">
+            <main className="flex-1 lg:ml-72 min-w-0 w-full p-4 sm:p-8 lg:p-12 pt-20 lg:pt-8">
                 <AnimatePresence mode="wait">
                     {activeTab === 'overview' && (
                         <motion.div key="overview" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }}>

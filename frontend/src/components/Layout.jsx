@@ -7,13 +7,14 @@ const Layout = ({ children }) => {
     const isLandingPage = location.pathname === '/';
     const isEmployerPage = location.pathname === '/employer' || location.pathname.startsWith('/employer/');
     const isAdminPage = location.pathname === '/admin' || location.pathname.startsWith('/admin/');
-    const showDefaultNavbar = !isLandingPage && !isEmployerPage && !isAdminPage;
+    const isRegisterPage = location.pathname === '/register';
+    const showDefaultNavbar = !isLandingPage && !isEmployerPage && !isAdminPage && !isRegisterPage;
 
     return (
-        <div className="min-h-screen bg-slate-50 flex flex-col">
+        <div className="min-h-screen bg-slate-50 flex flex-col w-full max-w-full overflow-x-hidden">
             <a href="#main-content" className="skip-to-content">Skip to content</a>
             {showDefaultNavbar && <Navbar />}
-            <main id="main-content" className="flex-1" aria-live="polite" aria-label="Main content">
+            <main id="main-content" className="flex-1 w-full max-w-full min-w-0 overflow-x-hidden" aria-live="polite" aria-label="Main content">
                 {children}
             </main>
             <AccessibilityFab />

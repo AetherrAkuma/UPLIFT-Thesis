@@ -51,7 +51,7 @@ const DataPrivacyAct = () => {
     const isCandidate = accountType === 'candidate';
 
     const destination = isCandidate
-        ? '/?mode=register'
+        ? '/register'
         : employerFlow === 'quick'
             ? '/?mode=employer'
             : '/employer/register';

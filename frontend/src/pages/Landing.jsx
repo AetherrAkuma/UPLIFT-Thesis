@@ -56,7 +56,13 @@ const Landing = () => {
     useEffect(() => {
         const params = new URLSearchParams(window.location.search);
         const mode = params.get('mode');
-        const isRegistration = mode === 'register' || mode === 'employer';
+
+        if (mode === 'register') {
+            navigate('/register', { replace: true, state: location.state });
+            return;
+        }
+
+        const isRegistration = mode === 'employer';
 
         if (mode === 'login' || (isRegistration && location.state?.privacyAcknowledged)) {
             // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -65,9 +71,7 @@ const Landing = () => {
         }
 
         if (isRegistration) {
-            const accountType = mode === 'employer' ? 'employer' : 'candidate';
-            const flow = mode === 'employer' ? 'quick' : 'full';
-            navigate(`/privacy?intent=register&for=${accountType}&flow=${flow}`, { replace: true });
+            navigate('/privacy?intent=register&for=employer&flow=quick', { replace: true });
         }
     }, [location.state, navigate]);
 
@@ -251,7 +255,7 @@ const Landing = () => {
             </header>
 
             {/* Hero Section */}
-            <section className="relative pt-40 pb-32 px-6">
+            <section className="relative pt-40 pb-32 px-6 overflow-hidden">
                 <motion.div 
                     style={{ opacity, scale }}
                     className="max-w-7xl mx-auto text-center"

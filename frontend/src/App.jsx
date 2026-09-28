@@ -14,8 +14,10 @@ import AdminPortal from './pages/AdminPortal';
 import EmployerLanding from './pages/EmployerLanding';
 import EmployerLogin from './pages/EmployerLogin';
 import EmployerOnboarding from './pages/EmployerOnboarding';
+import Register from './pages/Register';
 import DataPrivacyAct from './pages/DataPrivacyAct';
 import Layout from './components/Layout';
+import ScrollToTop from './components/ScrollToTop';
 import { ToastProvider } from './context/ToastContext';
 
 const ProtectedRoute = ({ children, allowedRoles }) => {
@@ -68,6 +70,7 @@ const AppContent = () => {
 
   return (
     <Router>
+      <ScrollToTop />
       <AuthRedirectHandler />
       <Layout>
         <Routes>
@@ -129,6 +132,14 @@ const AppContent = () => {
             } 
           />
           <Route path="/privacy" element={<DataPrivacyAct />} />
+          <Route
+            path="/register"
+            element={
+              <PrivacyProtectedRoute accountType="candidate" flow="full">
+                <Register />
+              </PrivacyProtectedRoute>
+            }
+          />
           <Route path="/employer/welcome" element={<EmployerLanding />} />
           <Route path="/employer/login" element={<EmployerLogin />} />
           <Route

@@ -81,10 +81,10 @@ const JobDetails = () => {
     const isLongDescription = (job.job_description || '').length > 350;
 
     return (
-        <div className="min-h-screen bg-[#F8FAFC] pb-28 md:pb-20">
+        <div className="min-h-screen bg-[#F8FAFC] pb-28 md:pb-20 w-full max-w-full overflow-x-hidden min-w-0">
             {/* Top Navigation Bar */}
-            <div className="bg-white border-b border-slate-100 sticky top-0 z-30">
-                <div className="max-w-5xl mx-auto px-4 sm:px-6 h-16 sm:h-20 flex items-center justify-between">
+            <div className="bg-white border-b border-slate-100 sticky top-0 z-30 w-full">
+                <div className="max-w-5xl mx-auto px-4 sm:px-6 h-16 sm:h-20 flex items-center justify-between w-full min-w-0">
                     <button onClick={() => navigate(-1)} className="flex items-center gap-2 text-slate-500 hover:text-blue-600 font-bold transition-colors group text-sm sm:text-base">
                         <ArrowLeft size={18} className="group-hover:-translate-x-1 transition-transform" />
                         <span className="hidden xs:inline">Back to Discovery</span>
@@ -98,12 +98,12 @@ const JobDetails = () => {
                 </div>
             </div>
 
-            <div className="max-w-5xl mx-auto px-4 sm:px-6 mt-6 sm:mt-12">
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 sm:gap-8 lg:gap-12">
+            <div className="max-w-5xl mx-auto px-4 sm:px-6 mt-6 sm:mt-12 w-full min-w-0">
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 sm:gap-8 lg:gap-12 w-full min-w-0">
                     {/* Main Content Column */}
-                    <div className="lg:col-span-2 space-y-6 sm:space-y-10">
+                    <div className="lg:col-span-2 space-y-6 sm:space-y-10 min-w-0 w-full">
                         {/* Title Section */}
-                        <div className="bg-white rounded-3xl sm:rounded-[2.5rem] p-6 sm:p-8 border border-slate-100 shadow-sm">
+                        <div className="bg-white rounded-3xl sm:rounded-[2.5rem] p-4 sm:p-8 border border-slate-100 shadow-sm w-full min-w-0">
                             <div className="flex flex-col sm:flex-row sm:items-center gap-4 mb-6">
                                 <div className="w-14 h-14 sm:w-20 sm:h-20 bg-blue-50 text-blue-600 rounded-2xl sm:rounded-3xl border border-blue-100 shadow-sm flex items-center justify-center text-2xl sm:text-3xl font-black shrink-0">
                                     {job.employer_name?.charAt(0)}

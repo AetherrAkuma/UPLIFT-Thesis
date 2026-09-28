@@ -59,30 +59,30 @@ const Jobs = () => {
     }, [publicJobs, searchQuery, selectedJobType, selectedEnvironment, selectedLocation, selectedStamina]);
 
     return (
-        <div className="min-h-screen bg-slate-50 py-10 sm:py-16 px-4 sm:px-6">
-            <div className="max-w-7xl mx-auto">
+        <div className="min-h-screen bg-slate-50 py-8 sm:py-16 px-3 sm:px-6 w-full max-w-full overflow-x-hidden min-w-0">
+            <div className="max-w-7xl mx-auto w-full min-w-0">
                 {/* Header Banner */}
-                <div className="text-center mb-10 sm:mb-16">
+                <div className="text-center mb-8 sm:mb-16">
                     <div className="inline-flex items-center gap-2 px-4 py-2 bg-blue-50 rounded-full text-[#0038A8] text-[10px] font-black uppercase tracking-widest mb-4 sm:mb-6 border border-blue-100">
                         <Briefcase size={12} /> Public Job Board
                     </div>
-                    <h1 className="text-3xl sm:text-4xl md:text-5xl font-black text-slate-900 tracking-tight mb-3 sm:mb-4">
+                    <h1 className="text-2xl sm:text-4xl md:text-5xl font-black text-slate-900 tracking-tight mb-3 sm:mb-4">
                         Explore Open <span className="text-[#0038A8]">Opportunities</span>
                     </h1>
-                    <p className="text-slate-500 font-medium text-base sm:text-lg max-w-2xl mx-auto">
+                    <p className="text-slate-500 font-medium text-sm sm:text-lg max-w-2xl mx-auto">
                         Search and filter approved, verified-safe vacancies from inclusive employers across the Philippines.
                     </p>
                 </div>
 
                 {/* Search and Filters Card */}
-                <div className="max-w-4xl mx-auto mb-10 sm:mb-16 bg-white rounded-3xl sm:rounded-[2rem] p-5 sm:p-8 border border-slate-100 shadow-sm space-y-5 sm:space-y-6">
-                    <div className="relative">
+                <div className="max-w-4xl mx-auto mb-8 sm:mb-16 bg-white rounded-3xl sm:rounded-[2rem] p-4 sm:p-8 border border-slate-100 shadow-sm space-y-5 sm:space-y-6 w-full min-w-0">
+                    <div className="relative min-w-0 w-full">
                         <input 
                             type="text"
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
                             placeholder="Search by title, employer, location, or skills..."
-                            className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 sm:px-6 py-3.5 sm:py-4.5 pr-12 text-slate-700 placeholder:text-slate-400 focus:border-[#0038A8] focus:bg-white focus:outline-none transition-all text-xs sm:text-sm font-bold shadow-inner"
+                            className="w-full min-w-0 bg-slate-50 border-2 border-slate-100 rounded-2xl px-4 sm:px-6 py-3.5 sm:py-4.5 pr-12 text-slate-700 placeholder:text-slate-400 focus:border-[#0038A8] focus:bg-white focus:outline-none transition-all text-xs sm:text-sm font-bold shadow-inner"
                         />
                         {searchQuery && (
                             <button

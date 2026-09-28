@@ -43,13 +43,13 @@ const Applications = () => {
     };
 
     return (
-        <div className="min-h-screen bg-[#F8FAFC]">
+        <div className="min-h-screen bg-[#F8FAFC] w-full max-w-full overflow-x-hidden min-w-0">
             {/* Header */}
-            <div className="bg-white border-b border-slate-100">
-                <div className="max-w-6xl mx-auto px-6 h-24 flex items-center justify-between">
+            <div className="bg-white border-b border-slate-100 w-full">
+                <div className="max-w-6xl mx-auto px-4 sm:px-6 h-20 sm:h-24 flex items-center justify-between w-full min-w-0">
                     <div>
-                        <h1 className="text-2xl font-black text-slate-900">Job Applications</h1>
-                        <p className="text-sm font-bold text-slate-400">Track your vocational journey</p>
+                        <h1 className="text-xl sm:text-2xl font-black text-slate-900">Job Applications</h1>
+                        <p className="text-xs sm:text-sm font-bold text-slate-400">Track your vocational journey</p>
                     </div>
                     <button 
                         onClick={fetchApps}
@@ -60,29 +60,29 @@ const Applications = () => {
                 </div>
             </div>
 
-            <div className="max-w-6xl mx-auto px-6 py-12">
+            <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-12 w-full min-w-0">
                 {loading ? (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
                         {[1,2,3].map(i => (
-                            <div key={i} className="bg-white rounded-[2rem] p-8 border border-slate-100 h-64 animate-pulse" />
+                            <div key={i} className="bg-white rounded-2xl sm:rounded-[2rem] p-6 sm:p-8 border border-slate-100 h-64 animate-pulse" />
                         ))}
                     </div>
                 ) : apps.length === 0 ? (
-                    <div className="bg-white rounded-[3rem] p-20 text-center border border-slate-100 shadow-sm max-w-2xl mx-auto">
-                        <div className="w-24 h-24 bg-blue-50 rounded-[2.5rem] flex items-center justify-center text-blue-600 mx-auto mb-8 shadow-inner">
-                            <Briefcase size={40} />
+                    <div className="bg-white rounded-3xl sm:rounded-[3rem] p-6 sm:p-12 lg:p-20 text-center border border-slate-100 shadow-sm max-w-2xl mx-auto">
+                        <div className="w-20 h-20 sm:w-24 sm:h-24 bg-blue-50 rounded-2xl sm:rounded-[2.5rem] flex items-center justify-center text-blue-600 mx-auto mb-6 sm:mb-8 shadow-inner">
+                            <Briefcase size={36} />
                         </div>
-                        <h2 className="text-2xl font-black text-slate-900 mb-4">No Applications Yet</h2>
-                        <p className="text-slate-500 font-bold mb-8">Your dream job is waiting for you in the Discovery dashboard.</p>
+                        <h2 className="text-xl sm:text-2xl font-black text-slate-900 mb-3 sm:mb-4">No Applications Yet</h2>
+                        <p className="text-slate-500 font-medium text-xs sm:text-sm mb-6 sm:mb-8">Your dream job is waiting for you in the Discovery dashboard.</p>
                         <button 
                             onClick={() => navigate('/dashboard')}
-                            className="px-8 py-4 bg-blue-600 text-white rounded-2xl font-black uppercase tracking-widest text-xs shadow-xl shadow-blue-200 hover:bg-blue-700 transition-all active:scale-95"
+                            className="w-full sm:w-auto px-8 py-3.5 bg-blue-600 text-white rounded-2xl font-black uppercase tracking-widest text-xs shadow-xl shadow-blue-200 hover:bg-blue-700 transition-all active:scale-95"
                         >
                             Start Discovery
                         </button>
                     </div>
                 ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-8">
                         <AnimatePresence>
                             {apps.map((app, index) => (
                                 <motion.div 
@@ -90,10 +90,10 @@ const Applications = () => {
                                     initial={{ opacity: 0, y: 20 }}
                                     animate={{ opacity: 1, y: 0 }}
                                     transition={{ delay: index * 0.1 }}
-                                    className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all overflow-hidden group cursor-pointer"
+                                    className="bg-white rounded-2xl sm:rounded-[2.5rem] border border-slate-100 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all overflow-hidden group cursor-pointer"
                                     onClick={() => navigate(`/job/${app.job_id}`)}
                                 >
-                                    <div className="p-8">
+                                    <div className="p-5 sm:p-8">
                                         <div className="flex items-center justify-between mb-8">
                                             <div className="w-14 h-14 bg-slate-50 rounded-2xl border border-slate-100 flex items-center justify-center text-xl font-black text-slate-400 group-hover:bg-blue-600 group-hover:text-white transition-colors">
                                                 {app.employer_name?.charAt(0)}
