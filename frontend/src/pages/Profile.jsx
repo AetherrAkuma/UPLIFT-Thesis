@@ -7,7 +7,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
     User, Briefcase, Sliders, ChevronRight, Save, 
     CheckCircle2, Accessibility, GraduationCap, Building2, Terminal, 
-    Award, Sparkles, LayoutDashboard, Plus, FileText, Trash2, ArrowLeft, ArrowRight
+    Award, Sparkles, LayoutDashboard, Plus, FileText, Trash2, ArrowLeft, ArrowRight, Calendar
 } from 'lucide-react';
 import PDFViewer from '../components/PDFViewer';
 
@@ -44,6 +44,113 @@ const QUICK_SUGGESTIONS = {
     'awards': ['Employee of the Month', 'Academic Excellence', 'Community Leader']
 };
 
+const parseSingleExperienceString = (str) => {
+    const text = String(str).trim().replace(/^[-•*]\s*/, '');
+    if (!text) return null;
+
+    let company = '';
+    let position = '';
+    let year = '';
+
+    const yearMatch = text.match(/\(([^)]*\d{4}[^)]*)\)$/);
+    let baseText = text;
+    if (yearMatch) {
+        year = yearMatch[1].trim();
+        baseText = text.replace(/\(([^)]*\d{4}[^)]*)\)$/, '').trim();
+    }
+
+    if (baseText.includes(' at ')) {
+        const parts = baseText.split(' at ');
+        position = parts[0].trim();
+        company = parts.slice(1).join(' at ').trim();
+    } else if (baseText.includes(' - ')) {
+        const parts = baseText.split(' - ');
+        position = parts[0].trim();
+        company = parts.slice(1).join(' - ').trim();
+    } else {
+        position = baseText;
+    }
+
+    return { company, position, year };
+};
+
+const parseExperienceEntries = (raw) => {
+    if (!raw) return [{ company: '', position: '', year: '' }];
+    if (Array.isArray(raw)) {
+        const list = raw.map(x => {
+            if (typeof x === 'object' && x !== null) {
+                return {
+                    company: x.company || x.organization || '',
+                    position: x.position || x.role || x.title || '',
+                    year: x.year || x.date || x.duration || ''
+                };
+            }
+            if (typeof x === 'string') {
+                return parseSingleExperienceString(x);
+            }
+            return null;
+        }).filter(Boolean);
+        return list.length > 0 ? list : [{ company: '', position: '', year: '' }];
+    }
+    if (typeof raw === 'string') {
+        const trimmed = raw.trim();
+        if (!trimmed) return [{ company: '', position: '', year: '' }];
+        try {
+            const parsed = JSON.parse(trimmed);
+            if (Array.isArray(parsed)) {
+                return parseExperienceEntries(parsed);
+            }
+            if (typeof parsed === 'object' && parsed !== null) {
+                return [{
+                    company: parsed.company || parsed.organization || '',
+                    position: parsed.position || parsed.role || parsed.title || '',
+                    year: parsed.year || parsed.date || parsed.duration || ''
+                }];
+            }
+        } catch {
+            // Not JSON
+        }
+        const lines = trimmed.includes('\n\n') ? trimmed.split(/\n\n+/) : trimmed.split('\n');
+        const list = lines.map(line => parseSingleExperienceString(line)).filter(Boolean);
+        return list.length > 0 ? list : [{ company: '', position: '', year: '' }];
+    }
+    return [{ company: '', position: '', year: '' }];
+};
+
+const parseSkillsEntries = (raw) => {
+    if (!raw) return [''];
+    if (Array.isArray(raw)) {
+        const list = raw.map(s => typeof s === 'string' ? s.trim() : '').filter(Boolean);
+        return list.length > 0 ? list : [''];
+    }
+    if (typeof raw === 'string') {
+        const trimmed = raw.trim();
+        if (!trimmed) return [''];
+        try {
+            const parsed = JSON.parse(trimmed);
+            if (Array.isArray(parsed)) {
+                const list = parsed.map(s => typeof s === 'string' ? s.trim() : '').filter(Boolean);
+                if (list.length > 0) return list;
+            }
+        } catch {
+            // Not JSON
+        }
+        const list = trimmed.split(',').map(s => s.trim()).filter(Boolean);
+        return list.length > 0 ? list : [''];
+    }
+    return [''];
+};
+
+const serializeExperience = (entries) => {
+    const valid = (entries || []).filter(e => (e.company || '').trim() || (e.position || '').trim() || (e.year || '').trim());
+    return JSON.stringify(valid.map(e => ({
+        company: (e.company || '').trim(),
+        position: (e.position || '').trim(),
+        year: (e.year || '').trim(),
+        date: (e.year || '').trim()
+    })));
+};
+
 const Profile = () => {
     const { user, token, API_BASE_URL, login } = useAuth();
     const navigate = useNavigate();
@@ -71,6 +178,8 @@ const Profile = () => {
     const [disabilityProfile, setDisabilityProfile] = useState({ disabilities: [] });
     const [educEntries, setEducEntries] = useState([]);
     const [educStructured, setEducStructured] = useState(false);
+    const [expEntries, setExpEntries] = useState([{ company: '', position: '', year: '' }]);
+    const [skillEntries, setSkillEntries] = useState(['']);
 
     useEffect(() => {
         if (user) {
@@ -92,6 +201,8 @@ const Profile = () => {
                 auto_generate_resume: user.auto_generate_resume || false,
                 pwd_id_reference: user.pwd_id_reference || ''
             });
+            setExpEntries(parseExperienceEntries(user.experience));
+            setSkillEntries(parseSkillsEntries(user.skills));
             try {
                 const dp = (typeof user.disability_profile === 'object' && user.disability_profile) || JSON.parse(user.disability_profile || '{}');
                 const structured = dp && dp.disabilities ? dp : { disabilities: [] };
@@ -130,8 +241,12 @@ const Profile = () => {
         setSaving(true);
         setSaveStatus(null);
         try {
+            const expJson = serializeExperience(expEntries);
+            const joinedSkills = skillEntries.map(s => s.trim()).filter(Boolean).join(', ');
             const res = await axios.put(`${API_BASE_URL}/pwd/profile`, {
                 ...profile,
+                skills: joinedSkills,
+                experience: expJson,
                 disability_profile: JSON.stringify(disabilityProfile),
                 education: educStructured ? JSON.stringify(educEntries) : profile.education
             }, {
@@ -284,6 +399,12 @@ const Profile = () => {
             const capsOk = Object.values(disabilityProfile.capabilities || {}).some(v => v);
             const accOk = (disabilityProfile.accommodations || []).length > 0;
             return summaryOk || capsOk || accOk;
+        }
+        if (section.id === 'experience') {
+            return expEntries.some(e => (e.company || '').trim().length > 0 || (e.position || '').trim().length > 0 || (e.year || '').trim().length > 0);
+        }
+        if (section.id === 'skills') {
+            return skillEntries.some(s => s.trim().length > 0);
         }
         const complete = (profile[section.field]?.trim() || '').length > 0;
         return complete;
@@ -539,6 +660,10 @@ const Profile = () => {
                                     setEducEntries={setEducEntries}
                                     educStructured={educStructured}
                                     setEducStructured={setEducStructured}
+                                    expEntries={expEntries}
+                                    setExpEntries={setExpEntries}
+                                    skillEntries={skillEntries}
+                                    setSkillEntries={setSkillEntries}
                                     API_BASE_URL={API_BASE_URL}
                                 />
                             ))}
@@ -564,10 +689,14 @@ const SuggestionChips = ({ onSelect, suggestions }) => (
     </div>
 );
 
-const ExpansionPanel = ({ section, isOpen, onToggle, onFinish, profile, setProfile, toggleDisability, updateDisabilityEntry, disabilityProfile, setDisabilityProfile, educEntries, setEducEntries, educStructured, setEducStructured, API_BASE_URL }) => {
-    const isComplete = Array.isArray(profile[section.field]) 
-        ? (profile[section.field] || []).length > 0 
-        : (profile[section.field]?.trim() || '').length > 0;
+const ExpansionPanel = ({ section, isOpen, onToggle, onFinish, profile, setProfile, toggleDisability, updateDisabilityEntry, disabilityProfile, setDisabilityProfile, educEntries, setEducEntries, educStructured, setEducStructured, expEntries, setExpEntries, skillEntries, setSkillEntries, API_BASE_URL }) => {
+    const isComplete = section.id === 'experience'
+        ? expEntries.some(e => (e.company || '').trim().length > 0 || (e.position || '').trim().length > 0 || (e.year || '').trim().length > 0)
+        : section.id === 'skills'
+            ? skillEntries.some(s => s.trim().length > 0)
+            : Array.isArray(profile[section.field]) 
+                ? (profile[section.field] || []).length > 0 
+                : (profile[section.field]?.trim() || '').length > 0;
 
     const appendSuggestion = (field, value) => {
         setProfile(prev => {
@@ -591,11 +720,24 @@ const ExpansionPanel = ({ section, isOpen, onToggle, onFinish, profile, setProfi
                         <h3 className={`text-xl font-black transition-colors ${isOpen ? 'text-blue-600' : 'text-slate-800'}`}>{section.label}</h3>
                         {!isOpen && (
                             <p className="text-slate-400 text-xs font-medium mt-1 truncate max-w-[400px]">
-                                {profile[section.field] 
-                                    ? (Array.isArray(profile[section.field]) 
-                                        ? profile[section.field].join(', ') 
-                                        : profile[section.field]).substring(0, 80) + (profile[section.field].length > 80 ? '...' : '') 
-                                    : `No ${section.label.toLowerCase()} added yet.`}
+                                {section.id === 'experience'
+                                    ? (() => {
+                                        const valid = expEntries.filter(e => (e.company || '').trim() || (e.position || '').trim() || (e.year || '').trim());
+                                        if (valid.length === 0) return 'No work experience added yet.';
+                                        const first = valid[0];
+                                        const parts = [first.position, first.company ? `at ${first.company}` : '', first.year ? `(${first.year})` : ''].filter(Boolean);
+                                        return `${valid.length} experience entr${valid.length > 1 ? 'ies' : 'y'}: ${parts.join(' ')}`;
+                                    })()
+                                    : section.id === 'skills'
+                                        ? (() => {
+                                            const valid = skillEntries.map(s => s.trim()).filter(Boolean);
+                                            return valid.length > 0 ? valid.join(', ') : 'No technical skills added yet.';
+                                        })()
+                                        : profile[section.field] 
+                                            ? (Array.isArray(profile[section.field]) 
+                                                ? profile[section.field].join(', ') 
+                                                : profile[section.field]).substring(0, 80) + (profile[section.field].length > 80 ? '...' : '') 
+                                            : `No ${section.label.toLowerCase()} added yet.`}
                             </p>
                         )}
                     </div>
@@ -710,7 +852,230 @@ const ExpansionPanel = ({ section, isOpen, onToggle, onFinish, profile, setProfi
                                 </div>
                             )}
 
-                            {['experience', 'skills', 'projects', 'certs', 'awards'].includes(section.id) && (
+                            {section.id === 'experience' && (
+                                <div className="space-y-6">
+                                    <div className="flex items-center justify-between">
+                                        <label className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400">Work Experience Details</label>
+                                        <span className="text-[9px] text-slate-300 font-bold">QUICK TAGS</span>
+                                    </div>
+                                    <SuggestionChips 
+                                        suggestions={QUICK_SUGGESTIONS.experience || []} 
+                                        onSelect={(v) => {
+                                            setExpEntries(prev => {
+                                                const next = [...prev];
+                                                const lastIdx = next.length - 1;
+                                                const current = next[lastIdx] || { company: '', position: '', year: '' };
+                                                next[lastIdx] = {
+                                                    ...current,
+                                                    position: current.position ? `${current.position}, ${v}` : v
+                                                };
+                                                setProfile(p => ({ ...p, experience: serializeExperience(next) }));
+                                                return next;
+                                            });
+                                        }} 
+                                    />
+                                    
+                                    <div className="space-y-4">
+                                        {expEntries.map((expItem, index) => (
+                                            <div 
+                                                key={index} 
+                                                className="p-6 bg-slate-50 rounded-[2rem] border border-slate-200/80 space-y-4 relative group transition-all focus-within:border-blue-500 focus-within:bg-white"
+                                            >
+                                                <div className="flex items-center justify-between">
+                                                    <span className="text-[11px] font-black uppercase tracking-wider text-slate-600 flex items-center gap-2">
+                                                        <Building2 size={14} className="text-[#0038A8]" />
+                                                        Experience #{index + 1}
+                                                    </span>
+                                                    {expEntries.length > 1 && (
+                                                        <button 
+                                                            type="button"
+                                                            onClick={() => {
+                                                                setExpEntries(prev => {
+                                                                    const next = prev.filter((_, i) => i !== index);
+                                                                    const resolved = next.length > 0 ? next : [{ company: '', position: '', year: '' }];
+                                                                    setProfile(p => ({ ...p, experience: serializeExperience(resolved) }));
+                                                                    return resolved;
+                                                                });
+                                                            }}
+                                                            className="text-rose-400 hover:text-rose-600 transition-colors flex items-center gap-1.5 text-xs font-bold px-2.5 py-1 rounded-xl hover:bg-rose-50"
+                                                            aria-label={`Remove experience entry ${index + 1}`}
+                                                        >
+                                                            <Trash2 size={14} />
+                                                            <span>Remove</span>
+                                                        </button>
+                                                    )}
+                                                </div>
+
+                                                {/* 3 Divided Parts: Company, Position, Year */}
+                                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                                    <div className="space-y-1.5">
+                                                        <label className="text-[10px] font-black uppercase tracking-wider text-slate-400 pl-1 flex items-center gap-1.5">
+                                                            <Building2 size={13} className="text-[#0038A8]" />
+                                                            Company / Organization
+                                                        </label>
+                                                        <input 
+                                                            type="text"
+                                                            value={expItem.company || ''}
+                                                            onChange={(e) => {
+                                                                const val = e.target.value;
+                                                                setExpEntries(prev => {
+                                                                    const next = [...prev];
+                                                                    next[index] = { ...next[index], company: val };
+                                                                    setProfile(p => ({ ...p, experience: serializeExperience(next) }));
+                                                                    return next;
+                                                                });
+                                                            }}
+                                                            placeholder="e.g. Acme Corp"
+                                                            className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold text-slate-700 placeholder:text-slate-300 focus:border-blue-500 focus:outline-none transition-all shadow-sm"
+                                                        />
+                                                    </div>
+
+                                                    <div className="space-y-1.5">
+                                                        <label className="text-[10px] font-black uppercase tracking-wider text-slate-400 pl-1 flex items-center gap-1.5">
+                                                            <Briefcase size={13} className="text-[#0038A8]" />
+                                                            Position / Role
+                                                        </label>
+                                                        <input 
+                                                            type="text"
+                                                            value={expItem.position || ''}
+                                                            onChange={(e) => {
+                                                                const val = e.target.value;
+                                                                setExpEntries(prev => {
+                                                                    const next = [...prev];
+                                                                    next[index] = { ...next[index], position: val };
+                                                                    setProfile(p => ({ ...p, experience: serializeExperience(next) }));
+                                                                    return next;
+                                                                });
+                                                            }}
+                                                            placeholder="e.g. Customer Support Specialist"
+                                                            className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold text-slate-700 placeholder:text-slate-300 focus:border-blue-500 focus:outline-none transition-all shadow-sm"
+                                                        />
+                                                    </div>
+
+                                                    <div className="space-y-1.5">
+                                                        <label className="text-[10px] font-black uppercase tracking-wider text-slate-400 pl-1 flex items-center gap-1.5">
+                                                            <Calendar size={13} className="text-[#0038A8]" />
+                                                            Year / Duration
+                                                        </label>
+                                                        <input 
+                                                            type="text"
+                                                            value={expItem.year || ''}
+                                                            onChange={(e) => {
+                                                                const val = e.target.value;
+                                                                setExpEntries(prev => {
+                                                                    const next = [...prev];
+                                                                    next[index] = { ...next[index], year: val };
+                                                                    setProfile(p => ({ ...p, experience: serializeExperience(next) }));
+                                                                    return next;
+                                                                });
+                                                            }}
+                                                            placeholder="e.g. 2021 - 2023 or 2024"
+                                                            className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold text-slate-700 placeholder:text-slate-300 focus:border-blue-500 focus:outline-none transition-all shadow-sm"
+                                                        />
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+
+                                    <button 
+                                        type="button"
+                                        onClick={() => {
+                                            setExpEntries(prev => [...prev, { company: '', position: '', year: '' }]);
+                                        }}
+                                        className="w-full py-4 rounded-2xl border-2 border-dashed border-blue-200 bg-blue-50/30 text-[#0038A8] text-xs font-black uppercase tracking-widest hover:border-blue-400 hover:bg-blue-50 transition-all flex items-center justify-center gap-2"
+                                    >
+                                        <Plus size={16} /> Add Another Experience
+                                    </button>
+                                </div>
+                            )}
+
+                            {section.id === 'skills' && (
+                                <div className="space-y-6">
+                                    <div className="flex items-center justify-between">
+                                        <label className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400">Technical Skills Details</label>
+                                        <span className="text-[9px] text-slate-300 font-bold">QUICK TAGS</span>
+                                    </div>
+                                    <SuggestionChips 
+                                        suggestions={QUICK_SUGGESTIONS.skills || []} 
+                                        onSelect={(v) => {
+                                            setSkillEntries(prev => {
+                                                if (prev.some(s => s.trim().toLowerCase() === v.toLowerCase())) return prev;
+                                                let next;
+                                                const lastIdx = prev.length - 1;
+                                                if (lastIdx >= 0 && prev[lastIdx].trim() === '') {
+                                                    next = [...prev];
+                                                    next[lastIdx] = v;
+                                                } else {
+                                                    next = [...prev, v];
+                                                }
+                                                const joined = next.map(s => s.trim()).filter(Boolean).join(', ');
+                                                setProfile(p => ({ ...p, skills: joined }));
+                                                return next;
+                                            });
+                                        }} 
+                                    />
+                                    
+                                    <div className="space-y-3">
+                                        {skillEntries.map((skill, index) => (
+                                            <div 
+                                                key={index} 
+                                                className="p-4 bg-slate-50 rounded-2xl border border-slate-200/80 flex items-center gap-3 transition-all focus-within:border-blue-500 focus-within:bg-white"
+                                            >
+                                                <div className="w-8 h-8 rounded-xl bg-blue-50 text-[#0038A8] flex items-center justify-center shrink-0 font-bold text-xs">
+                                                    {index + 1}
+                                                </div>
+                                                <input 
+                                                    type="text"
+                                                    value={skill}
+                                                    onChange={(e) => {
+                                                        const val = e.target.value;
+                                                        setSkillEntries(prev => {
+                                                            const next = [...prev];
+                                                            next[index] = val;
+                                                            const joined = next.map(s => s.trim()).filter(Boolean).join(', ');
+                                                            setProfile(p => ({ ...p, skills: joined }));
+                                                            return next;
+                                                        });
+                                                    }}
+                                                    placeholder={`e.g. ${QUICK_SUGGESTIONS.skills[index % QUICK_SUGGESTIONS.skills.length] || 'Skill name'}`}
+                                                    className="flex-1 bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-bold text-slate-700 placeholder:text-slate-300 focus:border-blue-500 focus:outline-none transition-all"
+                                                />
+                                                {skillEntries.length > 1 && (
+                                                    <button 
+                                                        type="button"
+                                                        onClick={() => {
+                                                            setSkillEntries(prev => {
+                                                                const next = prev.filter((_, i) => i !== index);
+                                                                const resolved = next.length > 0 ? next : [''];
+                                                                const joined = resolved.map(s => s.trim()).filter(Boolean).join(', ');
+                                                                setProfile(p => ({ ...p, skills: joined }));
+                                                                return resolved;
+                                                            });
+                                                        }}
+                                                        className="text-rose-400 hover:text-rose-600 transition-colors p-2 rounded-xl hover:bg-rose-50 shrink-0"
+                                                        aria-label={`Remove skill ${index + 1}`}
+                                                    >
+                                                        <Trash2 size={16} />
+                                                    </button>
+                                                )}
+                                            </div>
+                                        ))}
+                                    </div>
+
+                                    <button 
+                                        type="button"
+                                        onClick={() => {
+                                            setSkillEntries(prev => [...prev, '']);
+                                        }}
+                                        className="w-full py-4 rounded-2xl border-2 border-dashed border-blue-200 bg-blue-50/30 text-[#0038A8] text-xs font-black uppercase tracking-widest hover:border-blue-400 hover:bg-blue-50 transition-all flex items-center justify-center gap-2"
+                                    >
+                                        <Plus size={16} /> Add Another Skill
+                                    </button>
+                                </div>
+                            )}
+
+                            {['projects', 'certs', 'awards'].includes(section.id) && (
                                 <div className="space-y-4">
                                     <div className="flex items-center justify-between">
                                         <label className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400">{section.label} Details</label>

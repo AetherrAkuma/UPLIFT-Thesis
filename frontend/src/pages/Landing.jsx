@@ -7,7 +7,7 @@ import { useFocusTrap } from '../hooks/useFocusTrap';
 import { 
     ShieldCheck, Sparkles, ArrowRight, ArrowLeft, User, Building, 
     Lock, Mail, Eye, EyeOff, X, CheckCircle2, Users, Briefcase, 
-    Accessibility, Globe, BarChart3, Heart, GraduationCap, Terminal, Plus, Trash2
+    Accessibility, Globe, BarChart3, Heart, GraduationCap, Terminal, Plus, Trash2, KeyRound
 } from 'lucide-react';
 
 const DISABILITY_CATEGORIES = {
@@ -46,6 +46,10 @@ const Landing = () => {
     const [success, setSuccess] = useState('');
     const [showPassword, setShowPassword] = useState(false);
     const [loading, setLoading] = useState(false);
+    const [rememberMe, setRememberMe] = useState(false);
+    const [newPassword, setNewPassword] = useState('');
+    const [confirmPassword, setConfirmPassword] = useState('');
+    const [showNewPassword, setShowNewPassword] = useState(false);
     const [isScrolled, setIsScrolled] = useState(false);
     const authModalRef = useFocusTrap(!!authMode);
     const [regStep, setRegStep] = useState(0);
@@ -64,7 +68,7 @@ const Landing = () => {
 
         const isRegistration = mode === 'employer';
 
-        if (mode === 'login' || (isRegistration && location.state?.privacyAcknowledged)) {
+        if (mode === 'login' || mode === 'forgot' || (isRegistration && location.state?.privacyAcknowledged)) {
             // eslint-disable-next-line react-hooks/set-state-in-effect
             setAuthMode(mode);
             return;
@@ -107,6 +111,10 @@ const Landing = () => {
         setEmail('');
         setPassword('');
         setName('');
+        setRememberMe(false);
+        setNewPassword('');
+        setConfirmPassword('');
+        setShowNewPassword(false);
         setError('');
         setSuccess('');
         setRegStep(0);
@@ -130,11 +138,51 @@ const Landing = () => {
         setError('');
         setLoading(true);
         try {
-            const res = await axios.post(`${API_BASE_URL}/auth/login`, { email, password });
-            login(res.data.token, res.data.user);
+            const res = await axios.post(`${API_BASE_URL}/auth/login`, { email, password, remember_me: rememberMe });
+            login(res.data.token, res.data.user, rememberMe);
             setAuthMode(null);
         } catch (err) {
             setError(err.response?.data?.detail || 'Login failed. Please check your credentials.');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleForgotPassword = async (e) => {
+        e.preventDefault();
+        setError('');
+        setSuccess('');
+
+        if (!email.trim()) {
+            setError('Please enter your email address.');
+            return;
+        }
+        if (!newPassword) {
+            setError('Please enter a new password.');
+            return;
+        }
+        if (newPassword.length < 6) {
+            setError('Password must be at least 6 characters.');
+            return;
+        }
+        if (newPassword !== confirmPassword) {
+            setError('Passwords do not match.');
+            return;
+        }
+
+        setLoading(true);
+        try {
+            const res = await axios.post(`${API_BASE_URL}/auth/forgot-password`, {
+                email: email.trim(),
+                new_password: newPassword
+            });
+            setSuccess(res.data.message || 'Password updated successfully! You can now log in.');
+            setTimeout(() => {
+                resetForms();
+                setAuthMode('login');
+            }, 2000);
+        } catch (err) {
+            setError(err.response?.data?.detail || 'Failed to reset password. Please check your email.');
         } finally {
             setLoading(false);
         }
@@ -542,14 +590,27 @@ const Landing = () => {
                             
                             <div className="p-6 sm:p-8 lg:p-12">
                                 <div className="text-center mb-6 sm:mb-8 lg:mb-10">
-                                    <div className={`w-20 h-20 rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-xl transition-colors ${authMode === 'employer' ? 'bg-red-50 text-[#CE1126] shadow-red-100' : 'bg-blue-50 text-[#0038A8] shadow-blue-100'}`}>
-                                        {authMode === 'login' ? <Lock size={36} /> : authMode === 'employer' ? <Building size={36} /> : <User size={36} />}
+                                    <div className={`w-20 h-20 rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-xl transition-colors ${
+                                        authMode === 'employer' ? 'bg-red-50 text-[#CE1126] shadow-red-100' : 
+                                        authMode === 'forgot' ? 'bg-amber-50 text-amber-600 shadow-amber-100' :
+                                        'bg-blue-50 text-[#0038A8] shadow-blue-100'
+                                    }`}>
+                                        {authMode === 'login' ? <Lock size={36} /> : 
+                                         authMode === 'employer' ? <Building size={36} /> : 
+                                         authMode === 'forgot' ? <KeyRound size={36} /> :
+                                         <User size={36} />}
                                     </div>
                                     <h2 className="text-3xl font-black text-slate-900 tracking-tight">
-                                        {authMode === 'login' ? 'Welcome Back' : authMode === 'employer' ? 'Employer Hub' : 'Create Account'}
+                                        {authMode === 'login' ? 'Welcome Back' : 
+                                         authMode === 'employer' ? 'Employer Hub' : 
+                                         authMode === 'forgot' ? 'Reset Password' :
+                                         'Create Account'}
                                     </h2>
                                     <p className="text-slate-400 text-sm mt-3 font-medium">
-                                        {authMode === 'login' ? 'Log in to continue your journey' : authMode === 'employer' ? 'Apply to post inclusive opportunities' : 'Join our community of talented PWDs'}
+                                        {authMode === 'login' ? 'Log in to continue your journey' : 
+                                         authMode === 'employer' ? 'Apply to post inclusive opportunities' : 
+                                         authMode === 'forgot' ? 'Enter your account details to set a new password' :
+                                         'Join our community of talented PWDs'}
                                     </p>
                                 </div>
 
@@ -710,6 +771,65 @@ const Landing = () => {
                                             </div>
                                         </form>
                                     </>
+                                ) : authMode === 'forgot' ? (
+                                    <form onSubmit={handleForgotPassword} className="space-y-6" aria-label="Forgot password form">
+                                        <div className="space-y-2">
+                                            <label className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 ml-4" htmlFor="forgot-email">Account Email</label>
+                                            <div className="relative">
+                                                <Mail className="absolute left-6 top-5 text-slate-300" size={20} aria-hidden="true" />
+                                                <input 
+                                                    id="forgot-email"
+                                                    type="email" value={email} onChange={(e) => setEmail(e.target.value)} required
+                                                    className="w-full bg-slate-50 border-2 border-transparent rounded-2xl py-5 pl-14 pr-6 text-sm font-bold text-slate-700 focus:border-[#0038A8] focus:bg-white focus:outline-none transition-all"
+                                                    placeholder="name@work.com"
+                                                    autoComplete="email"
+                                                />
+                                            </div>
+                                        </div>
+
+                                        <div className="space-y-2">
+                                            <label className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 ml-4" htmlFor="forgot-new-password">New Password</label>
+                                            <div className="relative">
+                                                <Lock className="absolute left-6 top-5 text-slate-300" size={20} aria-hidden="true" />
+                                                <input 
+                                                    id="forgot-new-password"
+                                                    type={showNewPassword ? "text" : "password"} value={newPassword} onChange={(e) => setNewPassword(e.target.value)} required
+                                                    minLength={6}
+                                                    className="w-full bg-slate-50 border-2 border-transparent rounded-2xl py-5 pl-14 pr-14 text-sm font-bold text-slate-700 focus:border-[#0038A8] focus:bg-white focus:outline-none transition-all"
+                                                    placeholder="At least 6 characters"
+                                                    autoComplete="new-password"
+                                                />
+                                                <button type="button" onClick={() => setShowNewPassword(!showNewPassword)} className="absolute right-6 top-5 text-slate-400 hover:text-slate-600 transition-colors" aria-label={showNewPassword ? 'Hide password' : 'Show password'}>
+                                                    {showNewPassword ? <EyeOff size={20} aria-hidden="true" /> : <Eye size={20} aria-hidden="true" />}
+                                                </button>
+                                            </div>
+                                        </div>
+
+                                        <div className="space-y-2">
+                                            <label className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 ml-4" htmlFor="forgot-confirm-password">Confirm Password</label>
+                                            <div className="relative">
+                                                <Lock className="absolute left-6 top-5 text-slate-300" size={20} aria-hidden="true" />
+                                                <input 
+                                                    id="forgot-confirm-password"
+                                                    type={showNewPassword ? "text" : "password"} value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} required
+                                                    minLength={6}
+                                                    className="w-full bg-slate-50 border-2 border-transparent rounded-2xl py-5 pl-14 pr-6 text-sm font-bold text-slate-700 focus:border-[#0038A8] focus:bg-white focus:outline-none transition-all"
+                                                    placeholder="Confirm new password"
+                                                    autoComplete="new-password"
+                                                />
+                                            </div>
+                                        </div>
+
+                                        {error && <div className="p-4 rounded-2xl bg-rose-50 border border-rose-100 text-rose-600 text-[11px] font-black text-center uppercase tracking-wider" role="alert">{error}</div>}
+                                        {success && <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-100 text-emerald-600 text-[11px] font-black text-center uppercase tracking-wider" role="status">{success}</div>}
+
+                                        <button 
+                                            type="submit" disabled={loading}
+                                            className="w-full py-5 rounded-[2rem] font-black text-sm uppercase tracking-[0.2em] shadow-xl transition-all transform active:scale-95 flex items-center justify-center gap-3 bg-[#0038A8] text-white hover:bg-blue-800 shadow-blue-100 disabled:opacity-50"
+                                        >
+                                            {loading ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" aria-label="Loading" /> : 'Reset Password'}
+                                        </button>
+                                    </form>
                                 ) : (
                                 <form onSubmit={authMode === 'login' ? handleLogin : handleRegister} className="space-y-6" aria-label={authMode === 'login' ? 'Login' : 'Registration'}>
                                     {authMode !== 'login' && (
@@ -759,6 +879,30 @@ const Landing = () => {
                                         </div>
                                     </div>
 
+                                    {authMode === 'login' && (
+                                        <div className="flex items-center justify-between px-2 pt-0.5">
+                                            <label htmlFor="remember-me" className="flex items-center gap-2.5 cursor-pointer select-none group">
+                                                <input 
+                                                    id="remember-me"
+                                                    type="checkbox"
+                                                    checked={rememberMe}
+                                                    onChange={(e) => setRememberMe(e.target.checked)}
+                                                    className="w-4 h-4 rounded-md border-slate-300 text-[#0038A8] focus:ring-[#0038A8] accent-[#0038A8] cursor-pointer transition-all"
+                                                />
+                                                <span className="text-xs font-bold text-slate-500 group-hover:text-slate-700 transition-colors">
+                                                    Remember me <span className="text-slate-400 font-medium">(for 30 days)</span>
+                                                </span>
+                                            </label>
+                                            <button
+                                                type="button"
+                                                onClick={() => { resetForms(); setAuthMode('forgot'); }}
+                                                className="text-xs font-bold text-[#0038A8] hover:text-blue-700 hover:underline transition-colors focus:outline-none"
+                                            >
+                                                Forgot password?
+                                            </button>
+                                        </div>
+                                    )}
+
                                     {error && <div className="p-4 rounded-2xl bg-rose-50 border border-rose-100 text-rose-600 text-[11px] font-black text-center uppercase tracking-wider" role="alert">{error}</div>}
                                     {success && <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-100 text-emerald-600 text-[11px] font-black text-center uppercase tracking-wider" role="status">{success}</div>}
 
@@ -778,6 +922,8 @@ const Landing = () => {
                                     <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">
                                         {authMode === 'login' ? (
                                             <>New here? <button onClick={openCandidateRegistration} className="text-[#0038A8] hover:underline">Create Account</button> or <button onClick={openQuickEmployerRegistration} className="text-[#CE1126] hover:underline">Apply as Employer</button></>
+                                        ) : authMode === 'forgot' ? (
+                                            <>Remember your password? <button onClick={() => { resetForms(); setAuthMode('login'); }} className="text-[#0038A8] hover:underline">Log In</button></>
                                         ) : (
                                             <>Already joined? <button onClick={() => { resetForms(); setAuthMode('login'); }} className="text-[#0038A8] hover:underline">Log In</button></>
                                         )}

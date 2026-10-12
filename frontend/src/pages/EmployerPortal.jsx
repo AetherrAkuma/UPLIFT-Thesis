@@ -1751,8 +1751,28 @@ const CandidateProfileModal = ({ candidate, onClose, token, API_BASE_URL }) => {
                             {candidate.experience && (
                                 <div className="space-y-3">
                                     <h4 className="text-[10px] font-black uppercase tracking-widest text-[#0038A8]">Work Experience</h4>
-                                    <div className="p-6 bg-white border border-slate-100 rounded-[2rem] shadow-sm space-y-2">
-                                        <p className="text-sm font-medium text-slate-600 whitespace-pre-wrap">{candidate.experience}</p>
+                                    <div className="p-6 bg-white border border-slate-100 rounded-[2rem] shadow-sm space-y-3">
+                                        {(() => {
+                                            try {
+                                                const parsed = JSON.parse(candidate.experience);
+                                                if (Array.isArray(parsed) && parsed.length > 0) {
+                                                    return parsed.map((item, idx) => (
+                                                        <div key={idx} className="border-b border-slate-100 pb-3 last:border-b-0 last:pb-0">
+                                                            <div className="flex items-center justify-between">
+                                                                <p className="text-sm font-bold text-slate-800">
+                                                                    {item.position || 'Role'}
+                                                                    {item.company ? <span className="font-normal text-slate-500"> at <span className="font-semibold text-slate-700">{item.company}</span></span> : ''}
+                                                                </p>
+                                                                {(item.year || item.date) && (
+                                                                    <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2.5 py-0.5 rounded-lg border border-blue-100">{item.year || item.date}</span>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                    ));
+                                                }
+                                            } catch {}
+                                            return <p className="text-sm font-medium text-slate-600 whitespace-pre-wrap">{candidate.experience}</p>;
+                                        })()}
                                     </div>
                                 </div>
                             )}

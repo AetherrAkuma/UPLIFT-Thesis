@@ -57,6 +57,7 @@ spacy>=3.7.2
 nltk>=3.8.1
 docx2txt>=0.8
 pdfminer.six>=20221105
-rendercv>=2.8
+rendercv[full]>=2.8
 python-dotenv>=1.0.0
+python-multipart>=0.0.12
 https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.7.1/en_core_web_sm-3.7.1-py3-none-any.whl

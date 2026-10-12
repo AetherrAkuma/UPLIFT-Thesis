@@ -4,7 +4,8 @@ import {
     ShieldCheck, UserCheck, Briefcase, FileSearch, Activity, 
     CheckCircle2, XCircle, Clock, TrendingUp,
     Users, Settings, Search, Building2,
-    Scale, AlertTriangle, BarChart3, Menu, X, FileText, LogOut
+    Scale, AlertTriangle, BarChart3, Menu, X, FileText, LogOut,
+    RefreshCw, Filter, KeyRound, LogIn, ArrowUpRight
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import axios from 'axios';
@@ -19,6 +20,9 @@ const AdminPortal = () => {
     const [pendingEmployers, setPendingEmployers] = useState([]);
     const [pendingJobs, setPendingJobs] = useState([]);
     const [auditLogs, setAuditLogs] = useState([]);
+    const [auditSearch, setAuditSearch] = useState('');
+    const [auditFilter, setAuditFilter] = useState('all'); // all, admin, registrations, jobs, security
+    const [auditLoading, setAuditLoading] = useState(false);
     const [mobileSidebar, setMobileSidebar] = useState(false);
     const [fairnessReport, setFairnessReport] = useState(null);
     const [fairnessLoading, setFairnessLoading] = useState(false);
@@ -107,15 +111,20 @@ const AdminPortal = () => {
         }
     };
 
-    const fetchAuditLogs = async () => {
+    const fetchAuditLogs = async (isManual = false) => {
         if (!token) return;
+        setAuditLoading(true);
         try {
             const res = await axios.get(`${API_BASE_URL}/admin/logs`, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
-            setAuditLogs(res.data);
+            setAuditLogs(Array.isArray(res.data) ? res.data : []);
+            if (isManual) toast.success("Audit logs refreshed successfully!");
         } catch (err) {
             handleAuthError(err, "Logs fetch");
+            if (isManual) toast.error("Could not refresh audit logs.");
+        } finally {
+            setAuditLoading(false);
         }
     };
 
@@ -183,6 +192,112 @@ const AdminPortal = () => {
             }
         }
     };
+
+    const formatTargetId = (targetId) => {
+        if (!targetId) return 'SYSTEM';
+        const str = String(targetId);
+        if (str.includes('-') && str.length > 8) {
+            return `${str.split('-')[0]}...`;
+        }
+        return str.length > 16 ? `${str.slice(0, 14)}...` : str;
+    };
+
+    const getActionBadge = (action = '') => {
+        const act = action.toLowerCase();
+        if (act.includes('approve')) {
+            return {
+                bg: 'bg-emerald-50 text-emerald-700 border-emerald-200/60',
+                icon: <CheckCircle2 size={16} className="text-emerald-600" />,
+                label: 'Approved'
+            };
+        }
+        if (act.includes('reject')) {
+            return {
+                bg: 'bg-rose-50 text-rose-700 border-rose-200/60',
+                icon: <XCircle size={16} className="text-rose-600" />,
+                label: 'Rejected'
+            };
+        }
+        if (act.includes('delete')) {
+            return {
+                bg: 'bg-red-50 text-red-700 border-red-200/60',
+                icon: <AlertTriangle size={16} className="text-red-600" />,
+                label: 'Deleted'
+            };
+        }
+        if (act.includes('job') || act.includes('application')) {
+            return {
+                bg: 'bg-indigo-50 text-indigo-700 border-indigo-200/60',
+                icon: <Briefcase size={16} className="text-indigo-600" />,
+                label: 'Job Activity'
+            };
+        }
+        if (act.includes('register')) {
+            return {
+                bg: 'bg-purple-50 text-purple-700 border-purple-200/60',
+                icon: <Users size={16} className="text-purple-600" />,
+                label: 'Registration'
+            };
+        }
+        if (act.includes('login') || act.includes('password')) {
+            return {
+                bg: 'bg-amber-50 text-amber-700 border-amber-200/60',
+                icon: <KeyRound size={16} className="text-amber-600" />,
+                label: 'Auth & Access'
+            };
+        }
+        if (act.includes('setting')) {
+            return {
+                bg: 'bg-sky-50 text-sky-700 border-sky-200/60',
+                icon: <Settings size={16} className="text-sky-600" />,
+                label: 'Config'
+            };
+        }
+        return {
+            bg: 'bg-slate-100 text-slate-700 border-slate-200',
+            icon: <Activity size={16} className="text-slate-600" />,
+            label: 'System'
+        };
+    };
+
+    const filteredAuditLogs = auditLogs.filter(log => {
+        const action = (log.action || '').toLowerCase();
+        const details = (log.details || '').toLowerCase();
+        const adminName = (log.admin_name || '').toLowerCase();
+        const targetType = (log.target_type || '').toLowerCase();
+        const targetId = String(log.target_id || '').toLowerCase();
+
+        if (auditFilter === 'admin') {
+            if (!action.includes('approve') && !action.includes('reject') && !action.includes('delete') && !action.includes('setting') && !action.includes('admin') && !action.includes('system')) {
+                return false;
+            }
+        } else if (auditFilter === 'registrations') {
+            if (!action.includes('register')) {
+                return false;
+            }
+        } else if (auditFilter === 'jobs') {
+            if (!action.includes('job') && !action.includes('application')) {
+                return false;
+            }
+        } else if (auditFilter === 'security') {
+            if (!action.includes('login') && !action.includes('password') && !action.includes('delete_account')) {
+                return false;
+            }
+        }
+
+        if (auditSearch.trim()) {
+            const query = auditSearch.toLowerCase().trim();
+            return (
+                action.includes(query) ||
+                details.includes(query) ||
+                adminName.includes(query) ||
+                targetType.includes(query) ||
+                targetId.includes(query)
+            );
+        }
+
+        return true;
+    });
 
     return (
         <div className="min-h-screen bg-slate-50 flex">
@@ -596,39 +711,177 @@ const AdminPortal = () => {
 
                     {activeTab === 'logs' && (
                         <motion.div key="logs" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-                            <header className="mb-12">
-                                <h2 className="text-3xl font-black text-slate-900 tracking-tight mb-2">Audit Logs</h2>
-                                <p className="text-slate-500 font-medium">Traceability for all administrative actions.</p>
+                            {/* Header */}
+                            <header className="mb-8 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                                <div>
+                                    <div className="flex items-center gap-3 mb-2">
+                                        <h2 className="text-3xl font-black text-slate-900 tracking-tight">Audit Logs & Platform Trail</h2>
+                                        <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-100 text-emerald-800 border border-emerald-200 flex items-center gap-1.5">
+                                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                                            Active Traceability
+                                        </span>
+                                    </div>
+                                    <p className="text-slate-500 font-medium">Immutable audit trail of administrative approvals, registrations, and system actions.</p>
+                                </div>
+                                <div className="flex items-center gap-3">
+                                    <button 
+                                        onClick={() => fetchAuditLogs(true)} 
+                                        disabled={auditLoading}
+                                        className="px-4 py-2.5 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 rounded-xl font-bold text-xs shadow-sm flex items-center gap-2 transition-all active:scale-95 disabled:opacity-50"
+                                    >
+                                        <RefreshCw size={14} className={auditLoading ? "animate-spin text-[#0038A8]" : "text-slate-500"} />
+                                        <span>{auditLoading ? "Refreshing..." : "Refresh Trail"}</span>
+                                    </button>
+                                </div>
                             </header>
 
-                            <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-xl shadow-slate-200/40 overflow-x-auto">
-                                <div className="divide-y divide-slate-50">
-                                    {auditLogs.map(log => (
-                                        <div key={log.id} className="p-6 flex items-start gap-6 hover:bg-slate-50/50 transition-colors">
-                                            <div className={`p-2.5 rounded-xl shrink-0 ${
-                                                log.action.includes('approve') ? 'bg-emerald-50 text-emerald-600' : 
-                                                log.action.includes('reject') ? 'bg-rose-50 text-rose-600' : 'bg-blue-50 text-blue-600'
-                                            }`}>
-                                                {log.action.includes('job') ? <Briefcase size={18}/> : <UserCheck size={18}/>}
-                                            </div>
-                                            <div className="flex-1 min-w-0">
-                                                <div className="flex items-center justify-between mb-1">
-                                                    <p className="font-bold text-slate-800">{log.details}</p>
-                                                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{new Date(log.timestamp).toLocaleString()}</span>
-                                                </div>
-                                                <div className="flex items-center gap-3">
-                                                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 flex items-center gap-1">
-                                                        <ShieldCheck size={12}/> Admin: {log.admin_name}
-                                                    </span>
-                                                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">•</span>
-                                                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 flex items-center gap-1">
-                                                        ID: {log.target_id.split('-')[0]}...
-                                                    </span>
-                                                </div>
-                                            </div>
-                                        </div>
+                            {/* Summary Metrics */}
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+                                <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm">
+                                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Total Events</span>
+                                    <p className="text-2xl font-black text-slate-800 mt-1">{auditLogs.length}</p>
+                                </div>
+                                <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm">
+                                    <span className="text-[10px] font-black uppercase tracking-widest text-emerald-600">Admin Actions</span>
+                                    <p className="text-2xl font-black text-emerald-700 mt-1">
+                                        {auditLogs.filter(l => (l.action||'').includes('approve') || (l.action||'').includes('reject') || (l.action||'').includes('delete') || (l.action||'').includes('setting')).length}
+                                    </p>
+                                </div>
+                                <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm">
+                                    <span className="text-[10px] font-black uppercase tracking-widest text-purple-600">Registrations</span>
+                                    <p className="text-2xl font-black text-purple-700 mt-1">
+                                        {auditLogs.filter(l => (l.action||'').includes('register')).length}
+                                    </p>
+                                </div>
+                                <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm">
+                                    <span className="text-[10px] font-black uppercase tracking-widest text-indigo-600">Job & Auth Events</span>
+                                    <p className="text-2xl font-black text-indigo-700 mt-1">
+                                        {auditLogs.filter(l => (l.action||'').includes('job') || (l.action||'').includes('login') || (l.action||'').includes('password')).length}
+                                    </p>
+                                </div>
+                            </div>
+
+                            {/* Filter Bar & Search */}
+                            <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm mb-6 flex flex-col md:flex-row gap-4 items-center justify-between">
+                                {/* Category Pills */}
+                                <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
+                                    {[
+                                        { id: 'all', label: 'All Logs', count: auditLogs.length },
+                                        { id: 'admin', label: 'Admin Reviews', count: auditLogs.filter(l => (l.action||'').includes('approve') || (l.action||'').includes('reject') || (l.action||'').includes('delete') || (l.action||'').includes('setting') || (l.action||'').includes('admin')).length },
+                                        { id: 'registrations', label: 'Registrations', count: auditLogs.filter(l => (l.action||'').includes('register')).length },
+                                        { id: 'jobs', label: 'Jobs & Applications', count: auditLogs.filter(l => (l.action||'').includes('job') || (l.action||'').includes('application')).length },
+                                        { id: 'security', label: 'Security & Auth', count: auditLogs.filter(l => (l.action||'').includes('login') || (l.action||'').includes('password')).length },
+                                    ].map(f => (
+                                        <button
+                                            key={f.id}
+                                            onClick={() => setAuditFilter(f.id)}
+                                            className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 ${
+                                                auditFilter === f.id
+                                                    ? 'bg-[#0038A8] text-white shadow-md shadow-blue-200'
+                                                    : 'bg-slate-100 hover:bg-slate-200 text-slate-600'
+                                            }`}
+                                        >
+                                            <span>{f.label}</span>
+                                            <span className={`px-1.5 py-0.2 rounded-md text-[10px] ${
+                                                auditFilter === f.id ? 'bg-white/20 text-white' : 'bg-slate-200/80 text-slate-600'
+                                            }`}>{f.count}</span>
+                                        </button>
                                     ))}
                                 </div>
+
+                                {/* Search Field */}
+                                <div className="relative w-full md:w-72">
+                                    <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                                    <input
+                                        type="text"
+                                        placeholder="Filter by keyword, name, ID..."
+                                        value={auditSearch}
+                                        onChange={(e) => setAuditSearch(e.target.value)}
+                                        className="w-full pl-9 pr-8 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-[#0038A8]/20 focus:border-[#0038A8] transition-all"
+                                    />
+                                    {auditSearch && (
+                                        <button 
+                                            onClick={() => setAuditSearch('')}
+                                            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5"
+                                        >
+                                            <X size={13} />
+                                        </button>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* Logs Container */}
+                            <div className="bg-white rounded-[2rem] border border-slate-100 shadow-xl shadow-slate-200/40 overflow-hidden">
+                                {filteredAuditLogs.length === 0 ? (
+                                    <div className="p-16 text-center">
+                                        <div className="w-16 h-16 bg-slate-50 rounded-2xl flex items-center justify-center text-slate-400 mx-auto mb-4 border border-slate-100">
+                                            <FileSearch size={28} />
+                                        </div>
+                                        <h3 className="font-black text-slate-700 text-lg mb-1">No Audit Logs Found</h3>
+                                        <p className="text-slate-400 text-sm max-w-sm mx-auto mb-5 font-medium">
+                                            {auditSearch || auditFilter !== 'all' 
+                                                ? "No audit records match your current filter criteria."
+                                                : "All platform events, user sign-ups, employer verifications, and administrative actions will be recorded here."}
+                                        </p>
+                                        {(auditSearch || auditFilter !== 'all') && (
+                                            <button
+                                                onClick={() => { setAuditSearch(''); setAuditFilter('all'); }}
+                                                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-all"
+                                            >
+                                                Reset Filters
+                                            </button>
+                                        )}
+                                    </div>
+                                ) : (
+                                    <div className="divide-y divide-slate-100">
+                                        {filteredAuditLogs.map(log => {
+                                            const badge = getActionBadge(log.action);
+                                            const safeTargetId = formatTargetId(log.target_id);
+                                            const formattedDate = new Date(log.timestamp).toLocaleString(undefined, {
+                                                month: 'short',
+                                                day: 'numeric',
+                                                year: 'numeric',
+                                                hour: '2-digit',
+                                                minute: '2-digit'
+                                            });
+
+                                            return (
+                                                <div key={log.id} className="p-5 md:p-6 flex items-start gap-4 md:gap-5 hover:bg-slate-50/70 transition-colors">
+                                                    <div className={`p-3 rounded-2xl border shrink-0 ${badge.bg}`}>
+                                                        {badge.icon}
+                                                    </div>
+                                                    <div className="flex-1 min-w-0">
+                                                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-1 mb-2">
+                                                            <div className="flex items-center gap-2 flex-wrap">
+                                                                <span className="font-extrabold text-slate-800 text-sm md:text-base leading-snug">
+                                                                    {log.details || log.action}
+                                                                </span>
+                                                                <span className={`px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider border ${badge.bg}`}>
+                                                                    {log.action}
+                                                                </span>
+                                                            </div>
+                                                            <span className="text-[11px] font-bold text-slate-400 shrink-0">
+                                                                {formattedDate}
+                                                            </span>
+                                                        </div>
+
+                                                        <div className="flex items-center gap-3 text-[11px] text-slate-500 font-semibold flex-wrap">
+                                                            <span className="flex items-center gap-1.5 bg-slate-100 px-2 py-0.5 rounded-lg text-slate-600 font-bold">
+                                                                <ShieldCheck size={12} className="text-[#0038A8]"/> 
+                                                                Actor: {log.admin_name || 'System Core'}
+                                                            </span>
+                                                            <span className="text-slate-300">•</span>
+                                                            <span className="flex items-center gap-1.5 bg-slate-100 px-2 py-0.5 rounded-lg text-slate-600">
+                                                                Target: <span className="font-bold text-slate-700">{log.target_type || 'system'}</span>
+                                                                <span className="text-slate-400 font-mono text-[10px]">({safeTargetId})</span>
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                )}
                             </div>
                         </motion.div>
                     )}

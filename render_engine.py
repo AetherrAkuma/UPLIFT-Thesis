@@ -390,7 +390,7 @@ def _experience_entry(data: dict) -> dict:
     return {
         "company": company,
         "position": position,
-        "date": data.get("date") or "",
+        "date": data.get("date") or data.get("year") or "",
         "start_date": data.get("start_date") or "",
         "end_date": data.get("end_date") or "",
         "location": data.get("location") or "",

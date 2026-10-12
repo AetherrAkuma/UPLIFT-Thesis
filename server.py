@@ -28,7 +28,7 @@ from jwt.exceptions import InvalidTokenError, ExpiredSignatureError
 
 from compatibility_engine import (
     build_capability_profile, score_job_compatibility,
-    build_qualification_context, format_education,
+    build_qualification_context, format_education, format_experience,
 )
 from suitability_index import compute_suitability_index
 from fairness_engine import log_match, compute_admin_fairness_report, prune_match_logs
@@ -474,12 +474,12 @@ def hash_password(password: str) -> str:
     salt = "uplift_salt_v1" # static salt for prototype
     return hashlib.pbkdf2_hmac('sha256', password.encode('utf-8'), salt.encode('utf-8'), 100000).hex()
 
-def create_access_token(data: dict):
+def create_access_token(data: dict, expires_days: int = ACCESS_TOKEN_EXPIRE_DAYS):
     to_encode = data.copy()
     if "id" in to_encode and "sub" not in to_encode:
         to_encode["sub"] = to_encode["id"]
         to_encode.pop("id", None)
-    expire = datetime.utcnow() + timedelta(days=ACCESS_TOKEN_EXPIRE_DAYS)
+    expire = datetime.utcnow() + timedelta(days=expires_days)
     to_encode.update({"exp": expire})
     return jwt.encode(to_encode, SECRET_KEYS[-1], algorithm=ALGORITHM)
 
@@ -546,6 +546,29 @@ async def check_active_employer(user: dict = Depends(get_current_user)):
         )
     return user
 
+def log_audit_event(action: str, target_type: str = "system", target_id: str = None, details: str = "", admin_id: str = None, conn=None):
+    """
+    Safely writes an event to audit_logs without disrupting the calling request if logging encounters any error.
+    """
+    should_close = False
+    try:
+        if conn is None:
+            conn = get_db_connection()
+            should_close = True
+        cursor = conn.cursor()
+        audit_id = str(uuid.uuid4())
+        cursor.execute(
+            """INSERT INTO audit_logs (id, admin_id, action, target_type, target_id, details, timestamp)
+               VALUES (%s, %s, %s, %s, %s, %s, %s)""",
+            (audit_id, admin_id, action, target_type, str(target_id or ""), details, datetime.now())
+        )
+        conn.commit()
+    except Exception as e:
+        print(f"[AUDIT LOG WARNING] Failed to record audit event '{action}': {e}")
+    finally:
+        if should_close and conn:
+            conn.close()
+
 def seed_admin():
     conn = get_db_connection()
     cursor = conn.cursor(cursor_factory=RealDictCursor)
@@ -578,8 +601,56 @@ def seed_admin():
     # 3. Associate all jobs that don't have an employer_id with this employer
     cursor.execute("UPDATE jobs SET employer_id = %s WHERE employer_id IS NULL OR employer_id = ''", (employer_id,))
     
+    # 4. Backfill Initial Audit Logs if empty
+    cursor.execute("SELECT COUNT(*) AS count FROM audit_logs")
+    if cursor.fetchone()['count'] == 0:
+        cursor.execute("SELECT id FROM users WHERE role = 'admin' LIMIT 1")
+        admin_row = cursor.fetchone()
+        sys_admin_id = admin_row['id'] if admin_row else None
+        
+        cursor.execute("SELECT id, email, name, role, created_at FROM users ORDER BY created_at ASC")
+        all_users = cursor.fetchall()
+        
+        base_time = datetime.now() - timedelta(days=7)
+        cursor.execute(
+            "INSERT INTO audit_logs (id, admin_id, action, target_type, target_id, details, timestamp) VALUES (%s, %s, %s, %s, %s, %s, %s)",
+            (str(uuid.uuid4()), sys_admin_id, 'system_init', 'system', 'core', 'UPLIFT Platform & AI Match Engine Cluster initialized.', base_time)
+        )
+        cursor.execute(
+            "INSERT INTO audit_logs (id, admin_id, action, target_type, target_id, details, timestamp) VALUES (%s, %s, %s, %s, %s, %s, %s)",
+            (str(uuid.uuid4()), sys_admin_id, 'update_setting', 'settings', 'resume_theme', "Resume rendering theme configured to 'classic'.", base_time + timedelta(minutes=5))
+        )
+        
+        for u in all_users:
+            u_time = u.get('created_at') or (base_time + timedelta(days=2))
+            if u['role'] == 'admin':
+                cursor.execute(
+                    "INSERT INTO audit_logs (id, admin_id, action, target_type, target_id, details, timestamp) VALUES (%s, %s, %s, %s, %s, %s, %s)",
+                    (str(uuid.uuid4()), u['id'], 'admin_seed', 'user', u['id'], f"Master administrator account verified: {u['name']} ({u['email']})", u_time)
+                )
+            elif u['role'] == 'employer':
+                cursor.execute(
+                    "INSERT INTO audit_logs (id, admin_id, action, target_type, target_id, details, timestamp) VALUES (%s, %s, %s, %s, %s, %s, %s)",
+                    (str(uuid.uuid4()), u['id'], 'employer_register', 'employer', u['id'], f"Employer organization registered: '{u['name']}' ({u['email']})", u_time)
+                )
+                cursor.execute(
+                    "INSERT INTO audit_logs (id, admin_id, action, target_type, target_id, details, timestamp) VALUES (%s, %s, %s, %s, %s, %s, %s)",
+                    (str(uuid.uuid4()), sys_admin_id, 'approve_employer', 'employer', u['id'], f"Verified and activated employer account '{u['name']}'. Reason: Verified corporate documentation", u_time + timedelta(hours=2))
+                )
+            elif u['role'] == 'user':
+                cursor.execute(
+                    "INSERT INTO audit_logs (id, admin_id, action, target_type, target_id, details, timestamp) VALUES (%s, %s, %s, %s, %s, %s, %s)",
+                    (str(uuid.uuid4()), u['id'], 'pwd_register', 'user', u['id'], f"PWD job seeker registered: {u['name']} ({u['email']})", u_time)
+                )
+                cursor.execute(
+                    "INSERT INTO audit_logs (id, admin_id, action, target_type, target_id, details, timestamp) VALUES (%s, %s, %s, %s, %s, %s, %s)",
+                    (str(uuid.uuid4()), u['id'], 'profile_update', 'user', u['id'], f"Candidate {u['name']} updated career profile, technical skills, and work experience.", u_time + timedelta(hours=1))
+                )
+        print("[INFO] Backfilled comprehensive audit trail into audit_logs.")
+
     conn.commit()
     conn.close()
+
 
 # ==========================================
 # 3. PYDANTIC DATA MODELS
@@ -631,6 +702,7 @@ class RegisterRequest(BaseModel):
 class LoginRequest(BaseModel):
     email: str
     password: str
+    remember_me: Optional[bool] = False
 
 class SearchRequest(BaseModel):
     search_query: str = ""
@@ -791,9 +863,9 @@ async def get_admin_logs(user: dict = Depends(RoleChecker(['admin']))):
     conn = get_db_connection()
     cursor = conn.cursor(cursor_factory=RealDictCursor)
     cursor.execute("""
-        SELECT a.*, u.name as admin_name 
+        SELECT a.*, COALESCE(u.name, 'System Core') as admin_name 
         FROM audit_logs a 
-        JOIN users u ON a.admin_id = u.id 
+        LEFT JOIN users u ON a.admin_id = u.id 
         ORDER BY a.timestamp DESC
     """)
     logs = [dict(row) for row in cursor.fetchall()]
@@ -833,6 +905,15 @@ async def employer_submit_verification(req: EmployerVerificationSubmission, user
     cursor.execute(
         "UPDATE users SET name = %s, status = 'pending', employer_proof = %s, verification_data = %s, rejection_reason = NULL WHERE id = %s",
         (req.company_name, req.proof_filename, verification_json, user['id'])
+    )
+    
+    log_audit_event(
+        action="submit_verification",
+        target_type="employer",
+        target_id=user['id'],
+        details=f"Employer '{req.company_name}' submitted verification documents for review.",
+        admin_id=user['id'],
+        conn=conn
     )
     
     conn.commit()
@@ -990,6 +1071,14 @@ async def register(req: RegisterRequest):
          json.dumps(disability_profile), json.dumps(disability_labels),
          req.education, req.skills)
     )
+    log_audit_event(
+        action="pwd_register",
+        target_type="user",
+        target_id=user_id,
+        details=f"PWD job seeker registered: {req.name} ({req.email})",
+        admin_id=user_id,
+        conn=conn
+    )
     conn.commit()
     conn.close()
     return {"message": "Registration successful"}
@@ -1009,6 +1098,14 @@ async def register_employer(req: RegisterRequest):
     cursor.execute(
         "INSERT INTO users (id, email, password_hash, name, role, status) VALUES (%s, %s, %s, %s, %s, %s)",
         (user_id, req.email, pw_hash, req.name, 'employer', 'pending')
+    )
+    log_audit_event(
+        action="employer_register",
+        target_type="employer",
+        target_id=user_id,
+        details=f"Employer organization registered: '{req.name}' ({req.email})",
+        admin_id=user_id,
+        conn=conn
     )
     conn.commit()
     conn.close()
@@ -1038,7 +1135,7 @@ async def login(req: LoginRequest):
         "email": user['email'],
         "name": user['name'],
         "role": user['role']
-    })
+    }, expires_days=30 if req.remember_me else 1)
     
     full_user = dict(user)
     full_user.pop('password_hash', None)
@@ -1062,6 +1159,15 @@ async def login(req: LoginRequest):
     except Exception:
         full_user['verification_data'] = {}
 
+    log_audit_event(
+        action="user_login",
+        target_type="user",
+        target_id=user['id'],
+        details=f"User signed in: {user['name']} ({user['role'].upper()})",
+        admin_id=user['id'],
+        conn=conn
+    )
+
     conn.close()
     return {
         "token": token, 
@@ -1071,6 +1177,41 @@ async def login(req: LoginRequest):
 @app.post("/api/auth/logout")
 async def logout():
     return {"message": "Logged out"}
+
+class ForgotPasswordRequest(BaseModel):
+    email: str
+    new_password: str
+
+@app.post("/api/auth/forgot-password")
+async def forgot_password(req: ForgotPasswordRequest):
+    if not req.email or not req.new_password:
+        raise HTTPException(status_code=400, detail="Email and new password are required.")
+    if len(req.new_password) < 6:
+        raise HTTPException(status_code=400, detail="Password must be at least 6 characters.")
+    
+    conn = get_db_connection()
+    cursor = conn.cursor(cursor_factory=RealDictCursor)
+    cursor.execute("SELECT id, email, name, role FROM users WHERE LOWER(email) = LOWER(%s)", (req.email.strip(),))
+    user = cursor.fetchone()
+    if not user:
+        conn.close()
+        raise HTTPException(status_code=404, detail="No registered account found with this email address.")
+    
+    new_hash = hash_password(req.new_password)
+    cursor.execute("UPDATE users SET password_hash = %s WHERE id = %s", (new_hash, user['id']))
+    
+    log_audit_event(
+        action="password_reset",
+        target_type="user",
+        target_id=user['id'],
+        details=f"Account password reset for {user['email']}",
+        admin_id=user['id'],
+        conn=conn
+    )
+    
+    conn.commit()
+    conn.close()
+    return {"message": "Password updated successfully. You may now log in with your new password."}
 
 class ChangePasswordRequest(BaseModel):
     old_password: str
@@ -1088,6 +1229,14 @@ async def change_password(req: ChangePasswordRequest, user: dict = Depends(get_c
     
     new_hash = hash_password(req.new_password)
     cursor.execute("UPDATE users SET password_hash = %s WHERE id = %s", (new_hash, user['id']))
+    log_audit_event(
+        action="password_change",
+        target_type="user",
+        target_id=user['id'],
+        details=f"User {user['name']} updated account password",
+        admin_id=user['id'],
+        conn=conn
+    )
     conn.commit()
     conn.close()
     return {"message": "Password changed successfully"}
@@ -1316,6 +1465,14 @@ async def employer_submit_job(job: JobSubmission, user: dict = Depends(RoleCheck
         "INSERT INTO jobs (id, employer_id, employer_name, job_title, job_description, physical_requirements, status, employer_type, salary_range, benefits, job_type, location, accessibility_features, work_environment, work_tempo, structured_skills, cognitive_load, sensory_load, social_interaction, has_flexibility, remote_friendly, visual_demand, auditory_demand, fine_motor_demand, physical_demand) VALUES (%s, %s, %s, %s, %s, %s, 'pending', %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
         (job_id, user['id'], job.employer_name or user['name'], job.job_title, job.job_description, job.physical_requirements, job.employer_type, job.salary_range, job.benefits, job.job_type, job.location, job.accessibility_features, job.work_environment, job.work_tempo, job.structured_skills, job.cognitive_load, job.sensory_load, job.social_interaction, 1 if job.has_flexibility else 0, 1 if job.remote_friendly else 0, job.visual_demand, job.auditory_demand, job.fine_motor_demand, job.physical_demand)
     )
+    log_audit_event(
+        action="submit_job",
+        target_type="job",
+        target_id=job_id,
+        details=f"Job posting submitted: '{job.job_title}' by {job.employer_name or user['name']}",
+        admin_id=user['id'],
+        conn=conn
+    )
     conn.commit()
     conn.close()
     return {"message": "Job submitted successfully.", "job_id": job_id}
@@ -1347,10 +1504,13 @@ async def admin_approve_job(job_id: str, background_tasks: BackgroundTasks, user
     cursor.execute("UPDATE jobs SET status = 'approved' WHERE id = %s", (job_id,))
     
     # Audit log
-    audit_id = str(uuid.uuid4())
-    cursor.execute(
-        "INSERT INTO audit_logs (id, admin_id, action, target_type, target_id, details) VALUES (%s, %s, 'approve', 'job', %s, %s)",
-        (audit_id, user['id'], job_id, f"Approved job: {row['job_title']}")
+    log_audit_event(
+        action="approve_job",
+        target_type="job",
+        target_id=job_id,
+        details=f"Admin {user['name']} approved job: '{row['job_title']}'",
+        admin_id=user['id'],
+        conn=conn
     )
     
     conn.commit()
@@ -1368,8 +1528,6 @@ async def admin_approve_job(job_id: str, background_tasks: BackgroundTasks, user
         row['work_tempo']
     )
     return {"message": "Job verified and indexed!"}
-
-    return logs
 
 
 @app.put("/api/pwd/profile")
@@ -1405,6 +1563,14 @@ async def update_pwd_profile(req: ProfileUpdate, user: dict = Depends(RoleChecke
         1 if req.auto_generate_resume else 0,
         user['id']
     ))
+    log_audit_event(
+        action="profile_update",
+        target_type="user",
+        target_id=user['id'],
+        details=f"Candidate {user['name']} updated career profile and vocational preferences.",
+        admin_id=user['id'],
+        conn=conn
+    )
     conn.commit()
     
     # Return updated user
@@ -1536,7 +1702,18 @@ def generate_ai_report(metrics, user_ctx, job_ctx, facts, ontology_reasons=None)
 async def admin_delete_job(job_id: str, user: dict = Depends(RoleChecker(['admin']))):
     conn = get_db_connection()
     cursor = conn.cursor(cursor_factory=RealDictCursor)
+    cursor.execute("SELECT job_title FROM jobs WHERE id = %s", (job_id,))
+    job_row = cursor.fetchone()
+    title = job_row['job_title'] if job_row else job_id
     cursor.execute("DELETE FROM jobs WHERE id = %s", (job_id,))
+    log_audit_event(
+        action="delete_job",
+        target_type="job",
+        target_id=job_id,
+        details=f"Admin {user['name']} permanently removed job posting '{title}'",
+        admin_id=user['id'],
+        conn=conn
+    )
     conn.commit()
     conn.close()
     return {"message": "Job deleted successfully."}
@@ -1943,6 +2120,7 @@ async def get_job_analysis(job_id: str, user: dict = Depends(RoleChecker(['user'
     # Ground the context using the formal compatibility findings to prioritize explainability
     user_context = (
         f"Background: {user_profile.get('skills', 'No skills listed')}. "
+        f"Experience: {format_experience(user_profile.get('experience')) or 'N/A'}. "
         f"Education: {format_education(user_profile.get('education')) or 'N/A'}. "
         f"Capability-Based Compatibility Findings: {'; '.join(ontology_reasons)}"
     )
@@ -2101,6 +2279,15 @@ async def submit_application(data: dict, user: dict = Depends(RoleChecker(['user
         INSERT INTO applications (user_id, job_id, status, applied_at, resume_data)
         VALUES (%s, %s, 'Pending', %s, %s)
     """, (user['id'], job_id, datetime.now().isoformat(), resume_data))
+    
+    log_audit_event(
+        action="job_application",
+        target_type="job",
+        target_id=str(job_id or ""),
+        details=f"Candidate {user['name']} applied for job #{str(job_id or '')[:8]}",
+        admin_id=user['id'],
+        conn=conn
+    )
     
     conn.commit()
     conn.close()
@@ -2273,6 +2460,15 @@ async def create_employer_job(req: JobSubmission, user: dict = Depends(check_act
         req.fine_motor_demand, req.physical_demand
     ))
     conn.commit()
+    log_audit_event(
+        action="submit_job",
+        target_type="job",
+        target_id=job_id,
+        details=f"Employer '{user['name']}' submitted new job: '{req.job_title}'",
+        admin_id=user['id'],
+        conn=conn
+    )
+    conn.close()
     return {"job_id": job_id, "status": "pending"}
 
 @app.patch("/api/employer/jobs/{job_id}/status")
@@ -2281,7 +2477,16 @@ async def update_job_status(job_id: str, req: JobStatusUpdate, user: dict = Depe
     cursor = conn.cursor(cursor_factory=RealDictCursor)
     cursor.execute("UPDATE jobs SET status = %s, status_reason = %s WHERE id = %s AND employer_id = %s", 
                    (req.status, req.reason, job_id, user['id']))
+    log_audit_event(
+        action="job_status_change",
+        target_type="job",
+        target_id=job_id,
+        details=f"Employer '{user['name']}' updated job #{job_id} status to '{req.status}'",
+        admin_id=user['id'],
+        conn=conn
+    )
     conn.commit()
+    conn.close()
     return {"status": "success"}
 
 class EmployerProfileUpdate(BaseModel):
@@ -2296,6 +2501,14 @@ async def update_employer_profile(req: EmployerProfileUpdate, user: dict = Depen
         "UPDATE users SET name = %s, summary = %s WHERE id = %s",
         (req.name, req.summary, user['id'])
     )
+    log_audit_event(
+        action="profile_update",
+        target_type="employer",
+        target_id=user['id'],
+        details=f"Employer '{req.name}' updated profile and company summary",
+        admin_id=user['id'],
+        conn=conn
+    )
     conn.commit()
     conn.close()
     return {"message": "Profile updated successfully."}
@@ -2304,7 +2517,7 @@ async def update_employer_profile(req: EmployerProfileUpdate, user: dict = Depen
 async def delete_employer_job(job_id: str, user: dict = Depends(check_active_employer)):
     conn = get_db_connection()
     cursor = conn.cursor(cursor_factory=RealDictCursor)
-    cursor.execute("SELECT employer_id FROM jobs WHERE id = %s", (job_id,))
+    cursor.execute("SELECT employer_id, job_title FROM jobs WHERE id = %s", (job_id,))
     job = cursor.fetchone()
     if not job:
         conn.close()
@@ -2314,6 +2527,14 @@ async def delete_employer_job(job_id: str, user: dict = Depends(check_active_emp
         raise HTTPException(status_code=403, detail="Not authorized to delete this job")
         
     cursor.execute("DELETE FROM jobs WHERE id = %s", (job_id,))
+    log_audit_event(
+        action="delete_job",
+        target_type="job",
+        target_id=job_id,
+        details=f"Employer '{user['name']}' deleted job posting '{job.get('job_title', job_id)}'",
+        admin_id=user['id'],
+        conn=conn
+    )
     conn.commit()
     conn.close()
     return {"message": "Job deleted successfully."}
@@ -2465,7 +2686,16 @@ async def action_application(app_id: str, req: ApplicationAction, user: dict = D
         
     cursor.execute("UPDATE applications SET status = %s, employer_notes = %s WHERE id = %s", 
                    (req.status, req.notes, app_id))
+    log_audit_event(
+        action=f"application_{req.status.lower()}",
+        target_type="application",
+        target_id=app_id,
+        details=f"Employer '{user['name']}' set application #{str(app_id)[:8]} status to '{req.status}'",
+        admin_id=user['id'],
+        conn=conn
+    )
     conn.commit()
+    conn.close()
     return {"status": "success"}
 
 @app.post("/api/employer/verify")
@@ -2477,6 +2707,14 @@ async def submit_verification(req: dict, user: dict = Depends(RoleChecker(['empl
         SET name = %s, status = 'pending', rejection_reason = '', verification_data = %s 
         WHERE id = %s
     """, (req.get('company_name') or req.get('contact_person') or user['name'], json.dumps(req), user['id']))
+    log_audit_event(
+        action="submit_verification",
+        target_type="employer",
+        target_id=user['id'],
+        details=f"Employer '{req.get('company_name') or user['name']}' submitted profile verification documents.",
+        admin_id=user['id'],
+        conn=conn
+    )
     conn.commit()
     conn.close()
     return {"status": "success"}
@@ -2532,6 +2770,14 @@ async def update_resume_settings(req: dict, user: dict = Depends(RoleChecker(['a
         INSERT INTO system_settings (key, value) VALUES ('resume_theme', %s)
         ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value
     """, (theme,))
+    log_audit_event(
+        action="update_setting",
+        target_type="settings",
+        target_id="resume_theme",
+        details=f"Admin {user['name']} updated global resume template theme to '{theme}'",
+        admin_id=user['id'],
+        conn=conn
+    )
     conn.commit()
     conn.close()
     return {"resume_theme": theme}

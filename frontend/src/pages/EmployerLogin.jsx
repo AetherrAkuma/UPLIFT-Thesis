@@ -13,6 +13,7 @@ const EmployerLogin = () => {
     const { login, API_BASE_URL } = useAuth();
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
+    const [rememberMe, setRememberMe] = useState(false);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
 
@@ -22,7 +23,7 @@ const EmployerLogin = () => {
         setError('');
         
         try {
-            const res = await axios.post(`${API_BASE_URL}/auth/login`, { email, password });
+            const res = await axios.post(`${API_BASE_URL}/auth/login`, { email, password, remember_me: rememberMe });
             const { user, token } = res.data;
             
             if (user.role !== 'employer' && user.role !== 'admin') {
@@ -31,7 +32,7 @@ const EmployerLogin = () => {
                 return;
             }
             
-            login(token, user);
+            login(token, user, rememberMe);
             if (user.role === 'admin') {
                 navigate('/admin');
             } else {
@@ -114,6 +115,28 @@ const EmployerLogin = () => {
                                         className="w-full bg-white border border-slate-200 rounded-[1.5rem] py-5 pl-14 pr-8 text-sm font-bold text-slate-800 placeholder:text-slate-300 focus:outline-none focus:border-[#0038A8] transition-all"
                                     />
                                 </div>
+                            </div>
+
+                            <div className="flex items-center justify-between px-2 pt-1">
+                                <label htmlFor="employer-remember-me" className="flex items-center gap-2.5 cursor-pointer select-none group">
+                                    <input 
+                                        id="employer-remember-me"
+                                        type="checkbox"
+                                        checked={rememberMe}
+                                        onChange={(e) => setRememberMe(e.target.checked)}
+                                        className="w-4 h-4 rounded-md border-slate-300 text-[#0038A8] focus:ring-[#0038A8] accent-[#0038A8] cursor-pointer transition-all"
+                                    />
+                                    <span className="text-xs font-bold text-slate-500 group-hover:text-slate-700 transition-colors">
+                                        Remember me <span className="text-slate-400 font-medium">(for 30 days)</span>
+                                    </span>
+                                </label>
+                                <button
+                                    type="button"
+                                    onClick={() => navigate('/?mode=forgot')}
+                                    className="text-xs font-bold text-[#0038A8] hover:text-blue-700 hover:underline transition-colors focus:outline-none"
+                                >
+                                    Forgot password?
+                                </button>
                             </div>
 
                             {error && (

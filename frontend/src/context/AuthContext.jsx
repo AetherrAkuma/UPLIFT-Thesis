@@ -6,7 +6,7 @@ const AuthContext = createContext(null);
 
 export const AuthProvider = ({ children }) => {
     const [user, setUser] = useState(null);
-    const [token, setToken] = useState(() => localStorage.getItem('upliftToken'));
+    const [token, setToken] = useState(() => localStorage.getItem('upliftToken') || sessionStorage.getItem('upliftToken'));
     const [loading, setLoading] = useState(true);
     const fetchingRef = useRef(false);
 
@@ -25,7 +25,7 @@ export const AuthProvider = ({ children }) => {
             return;
         }
 
-        const storedToken = localStorage.getItem('upliftToken');
+        const storedToken = localStorage.getItem('upliftToken') || sessionStorage.getItem('upliftToken');
         const headers = storedToken ? { 'Authorization': `Bearer ${storedToken}` } : {};
 
         axios.get(`${API_BASE_URL}/auth/me`, { headers })
@@ -33,9 +33,13 @@ export const AuthProvider = ({ children }) => {
             const freshToken = res.data.token || storedToken;
             if (freshToken) {
                 try {
-                    localStorage.setItem('upliftToken', freshToken);
+                    if (sessionStorage.getItem('upliftToken')) {
+                        sessionStorage.setItem('upliftToken', freshToken);
+                    } else {
+                        localStorage.setItem('upliftToken', freshToken);
+                    }
                 } catch (e) {
-                    console.warn('localStorage write failed:', e.message);
+                    console.warn('storage write failed:', e.message);
                 }
                 setToken(freshToken);
             }
@@ -45,6 +49,7 @@ export const AuthProvider = ({ children }) => {
             const isAuthError = e.response && (e.response.status === 401 || e.response.status === 403);
             if (isAuthError) {
                 localStorage.removeItem('upliftToken');
+                sessionStorage.removeItem('upliftToken');
                 setToken(null);
                 setUser(null);
             }
@@ -55,12 +60,18 @@ export const AuthProvider = ({ children }) => {
         });
     }, []);
 
-    const login = (newToken, userData) => {
+    const login = (newToken, userData, rememberMe = true) => {
         sessionStorage.removeItem('upliftLogout');
         try {
-            localStorage.setItem('upliftToken', newToken);
+            if (rememberMe) {
+                localStorage.setItem('upliftToken', newToken);
+                sessionStorage.removeItem('upliftToken');
+            } else {
+                sessionStorage.setItem('upliftToken', newToken);
+                localStorage.removeItem('upliftToken');
+            }
         } catch (e) {
-            console.warn('localStorage write failed:', e.message);
+            console.warn('storage write failed:', e.message);
         }
         setToken(newToken);
         setUser(userData);
@@ -74,6 +85,7 @@ export const AuthProvider = ({ children }) => {
             // Server down is fine — local state is cleared
         }
         localStorage.removeItem('upliftToken');
+        sessionStorage.removeItem('upliftToken');
         setToken(null);
         setUser(null);
     };

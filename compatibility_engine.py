@@ -516,6 +516,48 @@ def format_education(education):
             parts.append(" ".join(seg))
     return "; ".join(parts)
 
+def format_experience(experience):
+    """Format structured experience JSON into a readable embedding/report string."""
+    if not experience:
+        return ""
+    if isinstance(experience, list):
+        entries = experience
+    elif isinstance(experience, str):
+        try:
+            entries = json.loads(experience)
+        except (json.JSONDecodeError, TypeError):
+            return experience.strip()
+    else:
+        entries = []
+
+    if not isinstance(entries, list):
+        if isinstance(entries, dict):
+            entries = [entries]
+        else:
+            return str(experience).strip()
+
+    parts = []
+    for e in entries:
+        if not isinstance(e, dict):
+            if isinstance(e, str) and e.strip():
+                parts.append(e.strip())
+            continue
+        pos = (e.get("position") or e.get("role") or e.get("title") or "").strip()
+        comp = (e.get("company") or e.get("organization") or "").strip()
+        yr = (e.get("year") or e.get("date") or e.get("duration") or "").strip()
+        seg = []
+        if pos and comp:
+            seg.append(f"{pos} at {comp}")
+        elif pos:
+            seg.append(pos)
+        elif comp:
+            seg.append(comp)
+        if yr:
+            seg.append(f"({yr})")
+        if seg:
+            parts.append(" ".join(seg))
+    return "; ".join(parts) if parts else (str(experience).strip() if isinstance(experience, str) else "")
+
 
 def build_qualification_context(user_profile):
     """Disability-blind context for embedding: skills + education + summary + optional."""
@@ -529,9 +571,9 @@ def build_qualification_context(user_profile):
     summary = user_profile.get("summary") or ""
     if summary:
         parts.append(f"About me: {summary}")
-    experience = user_profile.get("experience") or ""
-    if experience:
-        parts.append(f"Experience: {experience}")
+    exp = format_experience(user_profile.get("experience"))
+    if exp:
+        parts.append(f"Experience: {exp}")
     return " ".join(parts) if parts else "General Job Search"
 
 
