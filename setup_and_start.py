@@ -491,6 +491,21 @@ def check_and_build_frontend():
         print("[SUCCESS] Frontend packages verified.")
     return True
 
+def wait_for_backend_ready(host="127.0.0.1", port=8000, timeout=60):
+    """Waits for Backend to load AI models and start listening on port 8000."""
+    print(f"[INFO] Waiting for Backend API on port {port} to become ready (loading AI models)...")
+    start_time = time.time()
+    while time.time() - start_time < timeout:
+        try:
+            with socket.create_connection((host, port), timeout=1):
+                print("\n[SUCCESS] Backend API is live and accepting connections!")
+                return True
+        except (socket.timeout, ConnectionRefusedError, OSError):
+            time.sleep(1)
+            print(".", end="", flush=True)
+    print("\n[WARNING] Backend startup timed out. Proceeding anyway...")
+    return False
+
 def main():
     print_banner("UPLIFT System Launcher & Auto-Repair Setup")
 
@@ -533,6 +548,10 @@ def main():
     print("[INFO] Spawning Backend API in a separate Command Prompt...")
     backend_cmd = f'start "UPLIFT-Backend" /d "{workspace_dir}" cmd /k "\"{venv_python}\" main.py"'
     subprocess.run(backend_cmd, shell=True)
+
+    # Wait for backend to open port 8000 before starting frontend
+    if frontend_ready:
+        wait_for_backend_ready("127.0.0.1", 8000, timeout=60)
 
     # 9. Launch Frontend in separate CMD window if ready
     if frontend_ready:

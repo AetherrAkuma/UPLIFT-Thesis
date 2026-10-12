@@ -131,9 +131,9 @@ POLICY_TERMS = [
 ]
 
 NEUTRAL = {
-    "physical": (30.0, "No physical accessibility features were stated by the employer. Treat this as unverified - ask the employer about ramps, elevators, and accessible restrooms (BP 344)."),
-    "digital": (30.0, "No digital accessibility features were stated. Verify that workplace tools are screen-reader friendly and keyboard-navigable (RA 10524)."),
-    "policy": (50.0, "No inclusive hiring policy was stated. Ask the employer about reasonable accommodations and anti-discrimination commitments (RA 10524)."),
+    "physical": (30.0, ["No physical accessibility features were stated by the employer. Treat this as unverified - ask the employer about ramps, elevators, and accessible restrooms (BP 344)."]),
+    "digital": (30.0, ["No digital accessibility features were stated. Verify that workplace tools are screen-reader friendly and keyboard-navigable (RA 10524)."]),
+    "policy": (50.0, ["No inclusive hiring policy was stated. Ask the employer about reasonable accommodations and anti-discrimination commitments (RA 10524)."]),
 }
 
 
@@ -218,6 +218,10 @@ def compute_suitability_index(job, compat_score):
     pillars = []
     for key, fn in tasks.items():
         score, evidence = fn(job, text) if key != "task" else _score_task(compat_score)
+        if isinstance(evidence, str):
+            evidence = [evidence]
+        elif not isinstance(evidence, list):
+            evidence = []
         meta = PILLAR_META[key]
         pillars.append({
             "key": key,

@@ -208,6 +208,48 @@ class PooledConnectionWrapper:
             except Exception:
                 pass
 
+    def __del__(self):
+        try:
+            self.close()
+        except Exception:
+            pass
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.close()
+
+    def __getattr__(self, name):
+        return getattr(self._conn, name)
+
+class DirectConnectionWrapper:
+    """
+    Direct connection fallback when the connection pool is saturated.
+    """
+    def __init__(self, conn):
+        self._conn = conn
+        self._closed = False
+
+    def close(self):
+        if not self._closed:
+            self._closed = True
+            try:
+                if not self._conn.closed and self._conn.status == psycopg2.extensions.STATUS_IN_TRANSACTION:
+                    self._conn.rollback()
+            except Exception:
+                pass
+            try:
+                self._conn.close()
+            except Exception:
+                pass
+
+    def __del__(self):
+        try:
+            self.close()
+        except Exception:
+            pass
+
     def __enter__(self):
         return self
 
@@ -224,14 +266,26 @@ def get_db_pool():
     if _db_pool is None or _db_pool.closed:
         _db_pool = ThreadedConnectionPool(
             minconn=2,
-            maxconn=20,
+            maxconn=50,
             dsn=DB_URI
         )
     return _db_pool
 
 def get_db_connection():
     pool = get_db_pool()
-    conn = pool.getconn()
+    try:
+        conn = pool.getconn()
+    except psycopg2.pool.PoolError:
+        import gc
+        gc.collect()
+        try:
+            conn = pool.getconn()
+        except psycopg2.pool.PoolError:
+            print("[WARN] Connection pool exhausted. Spawning direct fallback connection.")
+            direct_conn = psycopg2.connect(dsn=DB_URI)
+            direct_conn.autocommit = False
+            register_vector(direct_conn)
+            return DirectConnectionWrapper(direct_conn)
     conn.autocommit = False
     register_vector(conn)
     return PooledConnectionWrapper(conn, pool)
@@ -1114,65 +1168,66 @@ async def register_employer(req: RegisterRequest):
 @app.post("/api/auth/login")
 async def login(req: LoginRequest):
     conn = get_db_connection()
-    cursor = conn.cursor(cursor_factory=RealDictCursor)
-    cursor.execute("""
-        SELECT id, email, name, role, status, verification_data, rejection_reason, 
-               summary, skills, disabilities, disability_profile,
-               skill_weight, safety_weight, stamina_weight, 
-               physical_capabilities, preferred_intensity, requires_flexibility,
-               education, experience, projects, certifications, awards,
-               auto_generate_resume, password_hash 
-        FROM users WHERE email = %s
-    """, (req.email,))
-    user = cursor.fetchone()
-    
-    if not user or user['password_hash'] != hash_password(req.password):
-        conn.close()
-        raise HTTPException(status_code=401, detail="Invalid credentials")
-        
-    token = create_access_token({
-        "sub": user['id'],
-        "email": user['email'],
-        "name": user['name'],
-        "role": user['role']
-    }, expires_days=30 if req.remember_me else 1)
-    
-    full_user = dict(user)
-    full_user.pop('password_hash', None)
-    
-    # Safely parse JSON fields so frontend receives ready-to-use objects/arrays
     try:
-        full_user['disabilities'] = json.loads(full_user['disabilities']) if full_user.get('disabilities') else []
-    except Exception:
-        full_user['disabilities'] = []
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        cursor.execute("""
+            SELECT id, email, name, role, status, verification_data, rejection_reason, 
+                   summary, skills, disabilities, disability_profile,
+                   skill_weight, safety_weight, stamina_weight, 
+                   physical_capabilities, preferred_intensity, requires_flexibility,
+                   education, experience, projects, certifications, awards,
+                   auto_generate_resume, password_hash 
+            FROM users WHERE email = %s
+        """, (req.email,))
+        user = cursor.fetchone()
         
-    try:
-        full_user['disability_profile'] = json.loads(full_user['disability_profile']) if full_user.get('disability_profile') else {}
-    except Exception:
-        full_user['disability_profile'] = {}
+        if not user or user['password_hash'] != hash_password(req.password):
+            raise HTTPException(status_code=401, detail="Invalid credentials")
+            
+        token = create_access_token({
+            "sub": user['id'],
+            "email": user['email'],
+            "name": user['name'],
+            "role": user['role']
+        }, expires_days=30 if req.remember_me else 1)
         
-    try:
-        if isinstance(full_user.get('verification_data'), str):
-            full_user['verification_data'] = json.loads(full_user['verification_data']) if full_user['verification_data'] else {}
-        elif full_user.get('verification_data') is None:
+        full_user = dict(user)
+        full_user.pop('password_hash', None)
+        
+        # Safely parse JSON fields so frontend receives ready-to-use objects/arrays
+        try:
+            full_user['disabilities'] = json.loads(full_user['disabilities']) if full_user.get('disabilities') else []
+        except Exception:
+            full_user['disabilities'] = []
+            
+        try:
+            full_user['disability_profile'] = json.loads(full_user['disability_profile']) if full_user.get('disability_profile') else {}
+        except Exception:
+            full_user['disability_profile'] = {}
+            
+        try:
+            if isinstance(full_user.get('verification_data'), str):
+                full_user['verification_data'] = json.loads(full_user['verification_data']) if full_user['verification_data'] else {}
+            elif full_user.get('verification_data') is None:
+                full_user['verification_data'] = {}
+        except Exception:
             full_user['verification_data'] = {}
-    except Exception:
-        full_user['verification_data'] = {}
 
-    log_audit_event(
-        action="user_login",
-        target_type="user",
-        target_id=user['id'],
-        details=f"User signed in: {user['name']} ({user['role'].upper()})",
-        admin_id=user['id'],
-        conn=conn
-    )
+        log_audit_event(
+            action="user_login",
+            target_type="user",
+            target_id=user['id'],
+            details=f"User signed in: {user['name']} ({user['role'].upper()})",
+            admin_id=user['id'],
+            conn=conn
+        )
 
-    conn.close()
-    return {
-        "token": token, 
-        "user": full_user
-    }
+        return {
+            "token": token, 
+            "user": full_user
+        }
+    finally:
+        conn.close()
 
 @app.post("/api/auth/logout")
 async def logout():
@@ -2397,28 +2452,31 @@ class ApplicationAction(BaseModel):
 @app.get("/api/employer/stats")
 async def get_employer_stats(user: dict = Depends(check_active_employer)):
     conn = get_db_connection()
-    cursor = conn.cursor(cursor_factory=RealDictCursor)
-    
-    # Get counts for this specific employer
-    cursor.execute("SELECT COUNT(*) as count FROM jobs WHERE employer_id = %s", (user['id'],))
-    job_count = cursor.fetchone()['count']
-    
-    cursor.execute("""
-        SELECT COUNT(*) as count 
-        FROM applications a
-        JOIN jobs j ON a.job_id = j.id
-        WHERE j.employer_id = %s
-    """, (user['id'],))
-    app_count = cursor.fetchone()['count']
-    
-    cursor.execute("SELECT COUNT(*) as count FROM jobs WHERE employer_id = %s AND status = 'full'", (user['id'],))
-    fulfilled_count = cursor.fetchone()['count']
-    
-    return {
-        "job_count": job_count,
-        "app_count": app_count,
-        "fulfilled_count": fulfilled_count
-    }
+    try:
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        
+        # Get counts for this specific employer
+        cursor.execute("SELECT COUNT(*) as count FROM jobs WHERE employer_id = %s", (user['id'],))
+        job_count = cursor.fetchone()['count']
+        
+        cursor.execute("""
+            SELECT COUNT(*) as count 
+            FROM applications a
+            JOIN jobs j ON a.job_id = j.id
+            WHERE j.employer_id = %s
+        """, (user['id'],))
+        app_count = cursor.fetchone()['count']
+        
+        cursor.execute("SELECT COUNT(*) as count FROM jobs WHERE employer_id = %s AND status = 'full'", (user['id'],))
+        fulfilled_count = cursor.fetchone()['count']
+        
+        return {
+            "job_count": job_count,
+            "app_count": app_count,
+            "fulfilled_count": fulfilled_count
+        }
+    finally:
+        conn.close()
 
 @app.get("/api/employer/jobs")
 async def get_employer_jobs(user: dict = Depends(check_active_employer)):
@@ -2658,45 +2716,50 @@ async def get_candidate_resume_employer(pwd_id: str, user: dict = Depends(check_
 @app.get("/api/employer/applications")
 async def get_employer_applications(user: dict = Depends(check_active_employer)):
     conn = get_db_connection()
-    cursor = conn.cursor(cursor_factory=RealDictCursor)
-    cursor.execute("""
-        SELECT a.*, u.name as applicant_name, u.email as applicant_email, 
-               u.summary, u.skills, u.disabilities, u.physical_capabilities,
-               j.job_title
-        FROM applications a
-        JOIN users u ON a.user_id = u.id
-        JOIN jobs j ON a.job_id = j.id
-        WHERE j.employer_id = %s
-        ORDER BY a.applied_at DESC
-    """, (user['id'],))
-    return {"applications": [dict(r) for r in cursor.fetchall()]}
+    try:
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        cursor.execute("""
+            SELECT a.*, u.name as applicant_name, u.email as applicant_email, 
+                   u.summary, u.skills, u.disabilities, u.physical_capabilities,
+                   j.job_title
+            FROM applications a
+            JOIN users u ON a.user_id = u.id
+            JOIN jobs j ON a.job_id = j.id
+            WHERE j.employer_id = %s
+            ORDER BY a.applied_at DESC
+        """, (user['id'],))
+        return {"applications": [dict(r) for r in cursor.fetchall()]}
+    finally:
+        conn.close()
 
 @app.patch("/api/employer/applications/{app_id}")
 async def action_application(app_id: str, req: ApplicationAction, user: dict = Depends(check_active_employer)):
     conn = get_db_connection()
-    cursor = conn.cursor(cursor_factory=RealDictCursor)
-    # Verify the application belongs to this employer's job
-    cursor.execute("""
-        SELECT a.id FROM applications a
-        JOIN jobs j ON a.job_id = j.id
-        WHERE a.id = %s AND j.employer_id = %s
-    """, (app_id, user['id']))
-    if not cursor.fetchone():
-        raise HTTPException(status_code=403, detail="Unauthorized")
-        
-    cursor.execute("UPDATE applications SET status = %s, employer_notes = %s WHERE id = %s", 
-                   (req.status, req.notes, app_id))
-    log_audit_event(
-        action=f"application_{req.status.lower()}",
-        target_type="application",
-        target_id=app_id,
-        details=f"Employer '{user['name']}' set application #{str(app_id)[:8]} status to '{req.status}'",
-        admin_id=user['id'],
-        conn=conn
-    )
-    conn.commit()
-    conn.close()
-    return {"status": "success"}
+    try:
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        # Verify the application belongs to this employer's job
+        cursor.execute("""
+            SELECT a.id FROM applications a
+            JOIN jobs j ON a.job_id = j.id
+            WHERE a.id = %s AND j.employer_id = %s
+        """, (app_id, user['id']))
+        if not cursor.fetchone():
+            raise HTTPException(status_code=403, detail="Unauthorized")
+            
+        cursor.execute("UPDATE applications SET status = %s, employer_notes = %s WHERE id = %s", 
+                       (req.status, req.notes, app_id))
+        log_audit_event(
+            action=f"application_{req.status.lower()}",
+            target_type="application",
+            target_id=app_id,
+            details=f"Employer '{user['name']}' set application #{str(app_id)[:8]} status to '{req.status}'",
+            admin_id=user['id'],
+            conn=conn
+        )
+        conn.commit()
+        return {"status": "success"}
+    finally:
+        conn.close()
 
 @app.post("/api/employer/verify")
 async def submit_verification(req: dict, user: dict = Depends(RoleChecker(['employer']))):

@@ -361,7 +361,7 @@ const ScoreChip = ({ label, score, color }) => {
 };
 
 const SuitabilityIndexPanel = ({ idx }) => {
-    if (!idx || !idx.pillars) return null;
+    if (!idx || !Array.isArray(idx.pillars)) return null;
     const barColors = ['bg-amber-500', 'bg-blue-500', 'bg-emerald-500', 'bg-indigo-500'];
     return (
         <div className="bg-indigo-50 rounded-2xl p-6 border-2 border-indigo-100">
@@ -375,24 +375,31 @@ const SuitabilityIndexPanel = ({ idx }) => {
             </div>
             <p className="text-[10px] font-medium text-indigo-900/70 leading-relaxed mb-4">{idx.definition}</p>
             <div className="space-y-3">
-                {idx.pillars.map((p, i) => (
-                    <div key={p.key} className="bg-white rounded-xl p-3.5 border border-indigo-50">
-                        <div className="flex items-center justify-between mb-1.5">
-                            <span className="text-[10px] font-black text-slate-700 uppercase tracking-wider">
-                                {p.label}
-                                <span className="text-slate-400 font-bold"> · weight {Math.round(p.weight * 100)}%</span>
-                            </span>
-                            <span className="text-[10px] font-black text-slate-500">{p.score}%</span>
+                {idx.pillars.map((p, i) => {
+                    const evidenceList = Array.isArray(p.evidence)
+                        ? p.evidence
+                        : (typeof p.evidence === 'string' && p.evidence)
+                            ? [p.evidence]
+                            : [];
+                    return (
+                        <div key={p.key || i} className="bg-white rounded-xl p-3.5 border border-indigo-50">
+                            <div className="flex items-center justify-between mb-1.5">
+                                <span className="text-[10px] font-black text-slate-700 uppercase tracking-wider">
+                                    {p.label}
+                                    <span className="text-slate-400 font-bold"> · weight {Math.round((p.weight || 0) * 100)}%</span>
+                                </span>
+                                <span className="text-[10px] font-black text-slate-500">{p.score}%</span>
+                            </div>
+                            <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden mb-2">
+                                <div className={`h-full ${barColors[i % barColors.length]} rounded-full transition-all`} style={{ width: `${p.score || 0}%` }} />
+                            </div>
+                            <p className="text-[9px] font-bold text-indigo-900/60 leading-relaxed">{p.legal_basis}</p>
+                            {evidenceList.map((e, j) => (
+                                <p key={j} className="text-[9px] font-medium text-slate-500 mt-1 leading-relaxed">• {e}</p>
+                            ))}
                         </div>
-                        <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden mb-2">
-                            <div className={`h-full ${barColors[i % barColors.length]} rounded-full transition-all`} style={{ width: `${p.score}%` }} />
-                        </div>
-                        <p className="text-[9px] font-bold text-indigo-900/60 leading-relaxed">{p.legal_basis}</p>
-                        {p.evidence.map((e, j) => (
-                            <p key={j} className="text-[9px] font-medium text-slate-500 mt-1 leading-relaxed">• {e}</p>
-                        ))}
-                    </div>
-                ))}
+                    );
+                })}
             </div>
         </div>
     );
