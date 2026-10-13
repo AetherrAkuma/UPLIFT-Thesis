@@ -810,12 +810,16 @@ const Dashboard = () => {
     const [loadingAnalysis, setLoadingAnalysis] = useState(false);
     const [searchQuery, setSearchQuery] = useState("");
     const [useProfileContext, setUseProfileContext] = useState(() => {
-        const saved = localStorage.getItem('dashboard_use_profile_context');
-        return saved !== null ? saved === 'true' : false;
+        const saved = localStorage.getItem('dashboard_use_profile_context_v2');
+        if (saved !== null) {
+            return saved === 'true';
+        }
+        return true;
     });
     const [fairness, setFairness] = useState(null);
 
     useEffect(() => {
+        localStorage.setItem('dashboard_use_profile_context_v2', useProfileContext);
         localStorage.setItem('dashboard_use_profile_context', useProfileContext);
     }, [useProfileContext]);
     const [selectedJobType, setSelectedJobType] = useState('All');

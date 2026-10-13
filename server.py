@@ -29,6 +29,7 @@ from jwt.exceptions import InvalidTokenError, ExpiredSignatureError
 from compatibility_engine import (
     build_capability_profile, score_job_compatibility,
     build_qualification_context, format_education, format_experience,
+    compute_physical_safety_score,
 )
 from suitability_index import compute_suitability_index
 from fairness_engine import log_match, compute_admin_fairness_report, prune_match_logs
@@ -1675,7 +1676,7 @@ def generate_ai_report(metrics, user_ctx, job_ctx, facts, ontology_reasons=None)
         def run_stable_model(question, context, max_new=250):
             # CQA Prompting: Ground the model with specific metrics context to ensure explainability
             prompt = (
-                f"Context: You are an expert vocational analyst. {score_context} {context} The user is a {user_ctx} and the job is {job_title}.\n"
+                f"Context: You are an expert vocational analyst. {score_context} {context} Candidate background: {user_ctx}. Target role: {job_title}.\n"
                 f"Question: {question}\n"
                 f"Answer:"
             )
@@ -1693,8 +1694,13 @@ def generate_ai_report(metrics, user_ctx, job_ctx, facts, ontology_reasons=None)
             return res.replace("Answer:", "").replace("Answer", "").strip()
 
         # 1. Compatibility (grounded in suitability summary and safety score)
+        safety_q = (
+            f"Based on the safety score of {safety:.1f}%, summarize how the workplace setup and accommodations support safe, accessible performance."
+            if safety >= 70.0 else
+            f"With a safety score of {safety:.1f}%, describe key ergonomic adjustments or accommodations recommended to address physical demands."
+        )
         compatibility_raw = run_stable_model(
-            f"Based on the safety score of {safety:.1f}%, provide a concise summary explaining why this role is an accessible and safe match for the user.",
+            safety_q,
             facts.get("analysis", "Workplace suitability overview.")
         )
         compatibility_clean = compatibility_raw.strip()
@@ -1934,28 +1940,8 @@ async def pwd_suitability_match(req: SearchRequest, user: dict = Depends(RoleChe
         ontology_score = compat["score"]
         ontology_reasons = compat["reasons"]
 
-        # 2. Physical Safety Score (Grounded in Ergonomics & BP 344 Accommodations)
-        phys_ex = next((e for e in compat.get('explanations', []) if e.get('dimension_key') == 'physical'), None)
-        sens_ex = next((e for e in compat.get('explanations', []) if e.get('dimension_key') == 'sensory'), None)
-        fine_ex = next((e for e in compat.get('explanations', []) if e.get('dimension_key') == 'fine_motor'), None)
-        
-        base_safety = float(np.mean([
-            phys_ex['score'] if phys_ex else 80.0,
-            sens_ex['score'] if sens_ex else 80.0,
-            fine_ex['score'] if fine_ex else 80.0
-        ]))
-        
-        phys_req_text = (job.get('physical_requirements') or '').lower()
-        acc_features = (job.get('accessibility_features') or '').lower()
-        combined_acc = phys_req_text + " " + acc_features
-        dis_str = str(disabilities).lower()
-        
-        if "wheelchair" in dis_str and any(w in combined_acc for w in ["wheelchair", "seated", "ramp", "elevator", "level floor"]):
-            safety_score = max(base_safety, 95.0)
-        elif phys_ex and phys_ex.get('verdict') == 'mismatch':
-            safety_score = min(base_safety, 30.0)
-        else:
-            safety_score = base_safety
+        # 2. Physical Safety Score (Unified Deterministic Ergonomics & Multi-Category Accommodations)
+        safety_score = compute_physical_safety_score(job, user_profile, capabilities=capabilities, compat=compat)
 
         # 3. Sustainability Score (Task Intensity & Tempo vs User Preference)
         job_intensity = job.get('task_intensity', 'Medium')
@@ -2101,9 +2087,13 @@ async def get_job_analysis(job_id: str, user: dict = Depends(RoleChecker(['user'
     # Re-calculate the actual scores for high-explainability grounding
     disabilities = json.loads(user_profile.get('disabilities', '[]'))
     
-    # 1. Physical Safety Score (disability-blind qualification context)
-    pwd_context = build_qualification_context(user_profile)
+    # 1. Capability profile
+    capabilities = build_capability_profile(
+        user_profile.get('disability_profile'), disabilities
+    )
     
+    # 2. Bi-Encoder Semantic Vocational Relevance
+    pwd_context = build_qualification_context(user_profile)
     try:
         u_vec = model.encode(pwd_context, convert_to_numpy=True)
         emb = job['embedding']
@@ -2117,37 +2107,26 @@ async def get_job_analysis(job_id: str, user: dict = Depends(RoleChecker(['user'
             j_vec = None
             
         if j_vec is not None:
-            # Cosine similarity
             cos_sim = np.dot(u_vec, j_vec) / (np.linalg.norm(u_vec) * np.linalg.norm(j_vec))
             bi_score = min(100.0, max(0.0, (float(cos_sim) - 0.25) / 0.5 * 100))
         else:
             bi_score = 50.0
-            
-        raw_cross = cross_model.predict([[pwd_context, job['physical_requirements']]])[0]
-        cross_score = (1 / (1 + np.exp(-(float(raw_cross) + 1.5) / 1.2))) * 100
-        safety_score = (bi_score * 0.30) + (cross_score * 0.70)
     except Exception as e:
-        print(f"[WARN] Failed to calculate dynamic safety score: {e}")
-        safety_score = 85.0
-        bi_score = 80.0
+        print(f"[WARN] Failed to calculate bi-encoder vector similarity: {e}")
+        bi_score = 50.0
         
-    # 2. Sustainability Score (grounded in the capability profile, not stale columns)
-    capabilities = build_capability_profile(
-        user_profile.get('disability_profile'), disabilities
-    )
+    # 3. Sustainability Score (Task Intensity vs User Preference)
     job_intensity = job.get('task_intensity', 'Medium')
     user_pref = capabilities.get('preferred_intensity', 'Medium')
-    
     stamina_score = 100.0
     intensity_map = {"Low": 1, "Medium": 2, "High": 3}
     j_int = intensity_map.get(job_intensity, 2)
     u_pref = intensity_map.get(user_pref, 2)
-    
     if j_int > u_pref:
         stamina_score -= (j_int - u_pref) * 25
     stamina_score = max(0.0, min(100.0, stamina_score))
     
-    # 3. Skill Alignment Score
+    # 4. Skill Alignment Score
     combined_user_text = f"{user_profile.get('skills') or ''} {user_profile.get('summary') or ''}".lower()
     pwd_skills_set = set(re.findall(r'\b\w{3,}\b', combined_user_text))
     if user_profile.get('skills'):
@@ -2167,10 +2146,13 @@ async def get_job_analysis(job_id: str, user: dict = Depends(RoleChecker(['user'
         skill_score = max(skill_score, 40.0)
     skill_score = min(100.0, skill_score)
     
-    # 4. Capability Compatibility Score (replaces the coarse category ontology)
+    # 5. Capability Compatibility Score (from 9-dimension ergonomic matrix)
     compat = score_job_compatibility(user_profile, job, capabilities=capabilities, overlap_skills=overlap)
     ontology_score = compat["score"]
     ontology_reasons = compat["reasons"]
+
+    # 6. Physical Safety Score (Unified Deterministic Ergonomics & Multi-Category Accommodations)
+    safety_score = compute_physical_safety_score(job, user_profile, capabilities=capabilities, compat=compat)
     
     # Ground the context using the formal compatibility findings to prioritize explainability
     user_context = (

@@ -892,3 +892,140 @@ def get_ncda_disability_types():
 def get_icf_dimension_map():
     """Return the ICF-aligned dimension mappings."""
     return ICF_DIMENSION_MAP.copy()
+
+
+def compute_physical_safety_score(job, user_profile=None, capabilities=None, compat=None):
+    """
+    Computes the calibrated Physical Safety Score (Pillar 1: S_safety) under UMSEF.
+    Grounded in:
+    1. Deterministic Ergonomic Gap (physical, sensory, fine_motor) from compatibility matrix.
+    2. BP 344 Accessibility Law & Universal Workplace Accommodations across all 11 NCDA types.
+    3. Remote-friendly mitigating factors (zero architectural/transit barrier).
+    4. Proportional scaling without artificial cliff-edge caps.
+    """
+    if capabilities is None and user_profile:
+        disabilities = user_profile.get("disabilities")
+        if isinstance(disabilities, str):
+            try:
+                disabilities = json.loads(disabilities)
+            except Exception:
+                disabilities = [disabilities]
+        capabilities = build_capability_profile(
+            user_profile.get("disability_profile"), disabilities
+        )
+    elif capabilities is None:
+        capabilities = _cap()
+
+    if compat is None:
+        compat = score_job_compatibility(user_profile or {}, job, capabilities=capabilities)
+
+    explanations = compat.get("explanations", [])
+    phys_ex = next((e for e in explanations if e.get("dimension_key") == "physical"), None)
+    sens_ex = next((e for e in explanations if e.get("dimension_key") == "sensory"), None)
+    fine_ex = next((e for e in explanations if e.get("dimension_key") == "fine_motor"), None)
+
+    base_safety = float(np.mean([
+        phys_ex["score"] if phys_ex else 80.0,
+        sens_ex["score"] if sens_ex else 80.0,
+        fine_ex["score"] if fine_ex else 80.0,
+    ]))
+
+    # 1. Remote-Friendly Exemption
+    # Remote work removes commute, physical building barriers, and outdoor hazards entirely.
+    is_remote = (
+        bool(job.get("remote_friendly")) or
+        "remote" in (job.get("location") or "").lower() or
+        "remote" in (job.get("work_environment") or "").lower()
+    )
+    if is_remote:
+        return max(base_safety, 95.0)
+
+    # 2. Multi-Category Accommodation Matching (BP 344 + Assistive Workplace Adjustments)
+    acc_features = (job.get("accessibility_features") or "").lower()
+    phys_req_text = (job.get("physical_requirements") or "").lower()
+    combined_workplace_text = f"{acc_features} {phys_req_text}"
+
+    # Avoid false positives from negations (e.g. "no elevator", "no ramp", "without wheelchair access")
+    def contains_positive_feature(feature_keywords, target_text):
+        for kw in feature_keywords:
+            if kw in target_text:
+                # Check for preceding negation within 3 words
+                neg_pattern = r'\b(no|not|without|lacks?|non-)\s+(?:\w+\s+){0,2}' + re.escape(kw)
+                if not re.search(neg_pattern, target_text):
+                    return True
+        return False
+
+    # Extract user profile context
+    disabilities = []
+    if user_profile:
+        dis_raw = user_profile.get("disabilities")
+        if isinstance(dis_raw, str):
+            try:
+                disabilities = json.loads(dis_raw)
+            except Exception:
+                disabilities = [dis_raw]
+        elif isinstance(dis_raw, list):
+            disabilities = dis_raw
+    dis_str = (str(disabilities).lower() + " " + str(user_profile.get("disability_profile") or "").lower()) if user_profile else ""
+
+    # (a) Physical / Mobility / Orthopedic Accommodations (BP 344 Compliance)
+    mobility_terms = ["wheelchair", "orthopedic", "physical", "mobility", "spinal", "amputee", "cerebral palsy", "polio", "dystrophy", "scoliosis"]
+    is_mobility = any(t in dis_str for t in mobility_terms) or capabilities.get("physical") == "Low"
+    mobility_acc_keywords = [
+        "wheelchair", "seated", "ramp", "elevator", "level floor", "level access",
+        "accessible desk", "adjustable-height desk", "accessible restroom",
+        "ergonomic workstation", "ergonomic seating", "ground floor"
+    ]
+    has_mobility_acc = contains_positive_feature(mobility_acc_keywords, combined_workplace_text)
+
+    # (b) Visual Accommodations
+    visual_terms = ["visual", "blind", "low vision", "cataract", "glaucoma"]
+    is_visual = any(t in dis_str for t in visual_terms) or capabilities.get("visual") == "Low"
+    visual_acc_keywords = [
+        "screen reader", "braille", "nvda", "jaws", "magnifier", "high-contrast",
+        "large print", "assistive technology", "assistive tech"
+    ]
+    has_visual_acc = contains_positive_feature(visual_acc_keywords, combined_workplace_text)
+
+    # (c) Auditory Accommodations
+    auditory_terms = ["hearing", "deaf", "hard of hearing"]
+    is_auditory = any(t in dis_str for t in auditory_terms) or capabilities.get("auditory") == "Low"
+    auditory_acc_keywords = [
+        "caption", "visual alert", "written communication", "email", "chat",
+        "video relay", "hearing-aid"
+    ]
+    has_auditory_acc = contains_positive_feature(auditory_acc_keywords, combined_workplace_text)
+
+    # (d) Sensory / Neurodivergent Accommodations
+    sensory_terms = ["autism", "asd", "adhd", "sensory", "psychosocial", "mental", "ptsd", "anxiety"]
+    is_sensory = any(t in dis_str for t in sensory_terms) or capabilities.get("sensory") == "Low"
+    sensory_acc_keywords = [
+        "quiet workspace", "quiet zone", "noise-cancelling", "reduced noise",
+        "predictable routine", "structured", "flexible breaks"
+    ]
+    has_sensory_acc = contains_positive_feature(sensory_acc_keywords, combined_workplace_text)
+
+    # (e) Check if explicitly user-requested accommodations are offered in accessibility features
+    user_accs = [a.lower() for a in (capabilities.get("accommodations") or [])]
+    user_acc_match = False
+    if user_accs and acc_features:
+        for acc in user_accs:
+            if acc in acc_features:
+                user_acc_match = True
+                break
+
+    # Apply accommodation override if matching accommodation found
+    if (is_mobility and has_mobility_acc) or \
+       (is_visual and has_visual_acc) or \
+       (is_auditory and has_auditory_acc) or \
+       (is_sensory and has_sensory_acc) or \
+       user_acc_match:
+        safety_score = max(base_safety, 95.0)
+    elif phys_ex and phys_ex.get("verdict") == "mismatch":
+        # Physical demand exceeds comfort without accommodation (e.g. heavy lifting without assistive aids)
+        safety_score = min(base_safety, 30.0)
+    else:
+        safety_score = base_safety
+
+    return round(min(100.0, max(0.0, float(safety_score))), 1)
+

@@ -7,7 +7,7 @@ import {
     Briefcase, ShieldCheck, Mail, 
     Phone, Send, CheckCircle2, XCircle,
     Sparkles, AlertCircle, ChevronDown, ChevronUp,
-    MessageSquare, Clock
+    MessageSquare, Clock, Activity
 } from 'lucide-react';
 import axios from 'axios';
 import { useAuth } from '../context/AuthContext';
@@ -245,22 +245,77 @@ const JobDetails = () => {
                                 <h3 className="text-xs sm:text-sm font-black text-slate-900 uppercase tracking-widest mb-4">
                                     Work Environment & Operational Snapshot
                                 </h3>
-                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3 mb-6">
-                                    <div className="bg-slate-50 p-3.5 sm:p-4 rounded-2xl border border-slate-100">
-                                        <p className="text-[9px] sm:text-[10px] font-black text-slate-400 uppercase tracking-wider">Setting</p>
-                                        <p className="font-bold text-slate-800 text-xs sm:text-sm mt-1 truncate">{job.work_environment || 'Indoor'} {job.remote_friendly ? '(Remote)' : ''}</p>
+                                <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5 sm:gap-3.5 mb-6">
+                                    {/* 1. Setting */}
+                                    <div className="bg-slate-50/90 hover:bg-slate-50 p-3.5 sm:p-4 rounded-2xl border border-slate-200/70 transition-all flex flex-col justify-between shadow-xs min-w-0">
+                                        <div className="flex items-center gap-2 mb-2 min-w-0">
+                                            <div className="w-6 h-6 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
+                                                <Building2 size={13} aria-hidden="true" />
+                                            </div>
+                                            <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 truncate">Setting</span>
+                                        </div>
+                                        <div className="min-w-0">
+                                            <p className="font-bold text-slate-800 text-xs sm:text-sm leading-snug break-words">
+                                                {job.work_environment || 'Indoor'}
+                                            </p>
+                                            <p className={`text-[10px] font-bold mt-1 truncate ${job.remote_friendly ? 'text-emerald-600' : 'text-slate-400 font-medium'}`}>
+                                                {job.remote_friendly ? '✓ Remote-Friendly' : 'On-Site Workplace'}
+                                            </p>
+                                        </div>
                                     </div>
-                                    <div className="bg-slate-50 p-3.5 sm:p-4 rounded-2xl border border-slate-100">
-                                        <p className="text-[9px] sm:text-[10px] font-black text-slate-400 uppercase tracking-wider">Posture</p>
-                                        <p className="font-bold text-slate-800 text-xs sm:text-sm mt-1 truncate">{job.physical_demand === 'Low' ? 'Mostly Seated' : job.physical_demand === 'High' ? 'Active / Moving' : 'Standard Desk'}</p>
+
+                                    {/* 2. Posture */}
+                                    <div className="bg-slate-50/90 hover:bg-slate-50 p-3.5 sm:p-4 rounded-2xl border border-slate-200/70 transition-all flex flex-col justify-between shadow-xs min-w-0">
+                                        <div className="flex items-center gap-2 mb-2 min-w-0">
+                                            <div className="w-6 h-6 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+                                                <Activity size={13} aria-hidden="true" />
+                                            </div>
+                                            <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 truncate">Posture</span>
+                                        </div>
+                                        <div className="min-w-0">
+                                            <p className="font-bold text-slate-800 text-xs sm:text-sm leading-snug break-words">
+                                                {job.physical_demand === 'Low' ? 'Mostly Seated' : job.physical_demand === 'High' ? 'Active / Moving' : 'Standard Desk'}
+                                            </p>
+                                            <p className="text-[10px] font-medium text-slate-400 mt-1 truncate">
+                                                {job.physical_demand === 'Low' ? 'Low physical strain' : job.physical_demand === 'High' ? 'High physical activity' : 'Routine desk work'}
+                                            </p>
+                                        </div>
                                     </div>
-                                    <div className="bg-slate-50 p-3.5 sm:p-4 rounded-2xl border border-slate-100">
-                                        <p className="text-[9px] sm:text-[10px] font-black text-slate-400 uppercase tracking-wider">Communication</p>
-                                        <p className="font-bold text-slate-800 text-xs sm:text-sm mt-1 truncate">{job.auditory_demand === 'Low' ? 'Text / Email-First' : 'Mixed / Spoken'}</p>
+
+                                    {/* 3. Communication */}
+                                    <div className="bg-slate-50/90 hover:bg-slate-50 p-3.5 sm:p-4 rounded-2xl border border-slate-200/70 transition-all flex flex-col justify-between shadow-xs min-w-0">
+                                        <div className="flex items-center gap-2 mb-2 min-w-0">
+                                            <div className="w-6 h-6 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
+                                                <MessageSquare size={13} aria-hidden="true" />
+                                            </div>
+                                            <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 truncate">Communication</span>
+                                        </div>
+                                        <div className="min-w-0">
+                                            <p className="font-bold text-slate-800 text-xs sm:text-sm leading-snug break-words">
+                                                {job.auditory_demand === 'Low' ? 'Text / Email-First' : 'Mixed / Spoken'}
+                                            </p>
+                                            <p className="text-[10px] font-medium text-slate-400 mt-1 truncate">
+                                                {job.auditory_demand === 'Low' ? 'Async-friendly' : 'Spoken collaboration'}
+                                            </p>
+                                        </div>
                                     </div>
-                                    <div className="bg-slate-50 p-3.5 sm:p-4 rounded-2xl border border-slate-100">
-                                        <p className="text-[9px] sm:text-[10px] font-black text-slate-400 uppercase tracking-wider">Operational Pace</p>
-                                        <p className="font-bold text-slate-800 text-xs sm:text-sm mt-1 truncate">{job.work_tempo || 'Moderate'} {job.has_flexibility ? '• Flex' : ''}</p>
+
+                                    {/* 4. Operational Pace */}
+                                    <div className="bg-slate-50/90 hover:bg-slate-50 p-3.5 sm:p-4 rounded-2xl border border-slate-200/70 transition-all flex flex-col justify-between shadow-xs min-w-0">
+                                        <div className="flex items-center gap-2 mb-2 min-w-0">
+                                            <div className="w-6 h-6 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
+                                                <Clock size={13} aria-hidden="true" />
+                                            </div>
+                                            <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 truncate">Work Pace</span>
+                                        </div>
+                                        <div className="min-w-0">
+                                            <p className="font-bold text-slate-800 text-xs sm:text-sm leading-snug break-words">
+                                                {job.work_tempo || 'Moderate'}
+                                            </p>
+                                            <p className={`text-[10px] font-bold mt-1 truncate ${job.has_flexibility ? 'text-indigo-600' : 'text-slate-400 font-medium'}`}>
+                                                {job.has_flexibility ? '✓ Flexible Schedule' : 'Structured Routine'}
+                                            </p>
+                                        </div>
                                     </div>
                                 </div>
 
