@@ -3,9 +3,10 @@ import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { 
     User, LogOut, ChevronDown, Accessibility, Search, Building, 
-    Settings2, Briefcase, Menu, X, ShieldCheck, Home 
+    Settings2, Settings, Briefcase, Menu, X, ShieldCheck, Home 
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import ProfileSettingsModal from './ProfileSettingsModal';
 
 const Navbar = () => {
     const { user, logout } = useAuth();
@@ -13,6 +14,7 @@ const Navbar = () => {
     const location = useLocation();
     const [dropdownOpen, setDropdownOpen] = useState(false);
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+    const [profileSettingsOpen, setProfileSettingsOpen] = useState(false);
 
     // Automatically close menus on route change
     useEffect(() => {
@@ -89,15 +91,33 @@ const Navbar = () => {
                                 </button>
                             </>
                         ) : (
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-2 sm:gap-2.5">
+                                {/* Customize Profile beside the name dropdown */}
+                                {user.role === 'user' && (
+                                    <Link
+                                        to="/profile"
+                                        className={`flex items-center gap-1.5 px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-xl text-xs font-bold transition-all border ${
+                                            location.pathname === '/profile'
+                                                ? 'bg-[#0038A8] text-white border-[#0038A8] shadow-sm shadow-blue-200'
+                                                : 'bg-white text-slate-700 border-slate-200 hover:border-[#0038A8] hover:text-[#0038A8] hover:bg-blue-50/60'
+                                        }`}
+                                        aria-label="Customize Profile"
+                                        id="nav-customize-profile-btn"
+                                    >
+                                        <User size={15} className={location.pathname === '/profile' ? 'text-white' : 'text-[#0038A8]'} aria-hidden="true" />
+                                        <span className="hidden sm:inline">Customize Profile</span>
+                                    </Link>
+                                )}
+
                                 {/* User Dropdown on Desktop / Quick Info */}
                                 <div className="relative">
                                     <button 
                                         onClick={() => setDropdownOpen(!dropdownOpen)}
-                                        className="flex items-center gap-2 hover:bg-slate-50 p-1.5 sm:px-3 sm:py-2 rounded-xl transition"
+                                        className="flex items-center gap-2 hover:bg-slate-50 p-1.5 sm:px-3 sm:py-2 rounded-xl transition border border-transparent hover:border-slate-200"
                                         aria-expanded={dropdownOpen}
                                         aria-haspopup="true"
                                         aria-label="User menu"
+                                        id="navbar-user-dropdown-btn"
                                     >
                                         <div className="w-8 h-8 bg-blue-100 text-[#0038A8] rounded-full flex items-center justify-center font-black text-xs" aria-hidden="true">
                                             {user.name.charAt(0).toUpperCase()}
@@ -107,20 +127,29 @@ const Navbar = () => {
                                     </button>
                                     
                                     {dropdownOpen && (
-                                        <div className="absolute right-0 mt-2 w-60 bg-white rounded-2xl shadow-xl border border-slate-100 py-2 z-50" role="menu" aria-label="User menu options">
+                                        <div className="absolute right-0 mt-2 w-64 bg-white rounded-2xl shadow-xl border border-slate-100 py-2 z-50" role="menu" aria-label="User menu options">
                                             <div className="px-4 py-2.5 border-b border-slate-100 mb-1">
                                                 <p className="text-xs font-black text-slate-800 truncate">{user.name}</p>
                                                 <p className="text-[11px] font-semibold text-slate-400 truncate">{user.email}</p>
                                             </div>
+
+                                            {/* Profile Settings (Available for all logged-in accounts) */}
+                                            <button 
+                                                onClick={() => {
+                                                    setDropdownOpen(false);
+                                                    setProfileSettingsOpen(true);
+                                                }}
+                                                role="menuitem" 
+                                                className="w-full text-left px-4 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50 flex items-center gap-2.5 transition-colors"
+                                                id="dropdown-profile-settings-btn"
+                                            >
+                                                <Settings size={16} className="text-slate-400" aria-hidden="true" /> Profile Settings
+                                            </button>
+
                                             {user.role === 'user' && (
-                                                <>
-                                                    <Link to="/profile" role="menuitem" className="w-full text-left px-4 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50 flex items-center gap-2.5">
-                                                        <User size={16} className="text-slate-400" aria-hidden="true" /> Customize Profile
-                                                    </Link>
-                                                    <Link to="/applications" role="menuitem" className="w-full text-left px-4 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50 flex items-center gap-2.5">
-                                                        <Briefcase size={16} className="text-slate-400" aria-hidden="true" /> Job Applications
-                                                    </Link>
-                                                </>
+                                                <Link to="/applications" role="menuitem" className="w-full text-left px-4 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50 flex items-center gap-2.5">
+                                                    <Briefcase size={16} className="text-slate-400" aria-hidden="true" /> Job Applications
+                                                </Link>
                                             )}
                                             {user.role === 'employer' && (
                                                 <Link to="/employer" role="menuitem" className="w-full text-left px-4 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50 flex items-center gap-2.5">
@@ -228,6 +257,15 @@ const Navbar = () => {
                                         >
                                             <User size={18} className="text-[#0038A8]" /> Customize Profile
                                         </Link>
+                                        <button 
+                                            onClick={() => {
+                                                setMobileMenuOpen(false);
+                                                setProfileSettingsOpen(true);
+                                            }}
+                                            className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors text-left"
+                                        >
+                                            <Settings size={18} className="text-[#0038A8]" /> Profile Settings
+                                        </button>
                                         <Link 
                                             to="/applications" 
                                             className={`flex items-center gap-3 px-4 py-3 rounded-2xl text-xs font-bold transition-colors ${
@@ -241,20 +279,42 @@ const Navbar = () => {
                                     </>
                                 )}
                                 {user.role === 'employer' && (
-                                    <Link 
-                                        to="/employer" 
-                                        className="flex items-center gap-3 px-4 py-3 rounded-2xl text-xs font-bold text-slate-700 hover:bg-blue-50 hover:text-[#0038A8] transition-colors"
-                                    >
-                                        <Building size={18} className="text-[#0038A8]" /> Employer Portal
-                                    </Link>
+                                    <>
+                                        <button 
+                                            onClick={() => {
+                                                setMobileMenuOpen(false);
+                                                setProfileSettingsOpen(true);
+                                            }}
+                                            className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-xs font-bold text-slate-700 hover:bg-blue-50 hover:text-[#0038A8] transition-colors text-left"
+                                        >
+                                            <Settings size={18} className="text-[#0038A8]" /> Profile Settings
+                                        </button>
+                                        <Link 
+                                            to="/employer" 
+                                            className="flex items-center gap-3 px-4 py-3 rounded-2xl text-xs font-bold text-slate-700 hover:bg-blue-50 hover:text-[#0038A8] transition-colors"
+                                        >
+                                            <Building size={18} className="text-[#0038A8]" /> Employer Portal
+                                        </Link>
+                                    </>
                                 )}
                                 {user.role === 'admin' && (
-                                    <Link 
-                                        to="/admin" 
-                                        className="flex items-center gap-3 px-4 py-3 rounded-2xl text-xs font-bold text-slate-700 hover:bg-blue-50 hover:text-[#0038A8] transition-colors"
-                                    >
-                                        <Settings2 size={18} className="text-[#0038A8]" /> Admin Portal
-                                    </Link>
+                                    <>
+                                        <button 
+                                            onClick={() => {
+                                                setMobileMenuOpen(false);
+                                                setProfileSettingsOpen(true);
+                                            }}
+                                            className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-xs font-bold text-slate-700 hover:bg-blue-50 hover:text-[#0038A8] transition-colors text-left"
+                                        >
+                                            <Settings size={18} className="text-[#0038A8]" /> Profile Settings
+                                        </button>
+                                        <Link 
+                                            to="/admin" 
+                                            className="flex items-center gap-3 px-4 py-3 rounded-2xl text-xs font-bold text-slate-700 hover:bg-blue-50 hover:text-[#0038A8] transition-colors"
+                                        >
+                                            <Settings2 size={18} className="text-[#0038A8]" /> Admin Portal
+                                        </Link>
+                                    </>
                                 )}
                                 <div className="pt-2 border-t border-slate-100">
                                     <button 
@@ -269,6 +329,12 @@ const Navbar = () => {
                     </motion.div>
                 )}
             </AnimatePresence>
+
+            {/* Profile Settings Modal */}
+            <ProfileSettingsModal 
+                isOpen={profileSettingsOpen} 
+                onClose={() => setProfileSettingsOpen(false)} 
+            />
         </nav>
     );
 };

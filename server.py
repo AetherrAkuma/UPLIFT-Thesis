@@ -350,6 +350,8 @@ def init_db():
             name TEXT,
             role TEXT DEFAULT 'user',
             status TEXT DEFAULT 'active',
+            address TEXT DEFAULT '',
+            contact_number TEXT DEFAULT '',
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             employer_proof TEXT DEFAULT '',
             summary TEXT DEFAULT '',
@@ -427,11 +429,15 @@ def init_db():
         "projects": "TEXT DEFAULT ''",
         "certifications": "TEXT DEFAULT ''",
         "awards": "TEXT DEFAULT ''",
+        "address": "TEXT DEFAULT ''",
+        "contact_number": "TEXT DEFAULT ''",
         "created_at": "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
     }
     for col, definition in user_cols.items():
         cursor.execute(f"ALTER TABLE users ADD COLUMN IF NOT EXISTS {col} {definition}")
     
+    cursor.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS address TEXT DEFAULT ''")
+    cursor.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS contact_number TEXT DEFAULT ''")
     cursor.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'active'")
     cursor.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS employer_proof TEXT DEFAULT ''")
     cursor.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS verification_data TEXT DEFAULT '{}'")
@@ -1377,7 +1383,7 @@ async def login(req: LoginRequest, request: Request):
                    skill_weight, safety_weight, stamina_weight, 
                    physical_capabilities, preferred_intensity, requires_flexibility,
                    education, experience, projects, certifications, awards,
-                   auto_generate_resume, password_hash 
+                   auto_generate_resume, address, contact_number, password_hash 
             FROM users WHERE email = %s
         """, (req.email,))
         user = cursor.fetchone()
@@ -1480,12 +1486,111 @@ async def forgot_password(req: ForgotPasswordRequest):
     conn.close()
     return {"message": "Password updated successfully. You may now log in with your new password."}
 
+class ProfileSettingsRequest(BaseModel):
+    name: str
+    email: str
+    address: Optional[str] = ""
+    contact_number: Optional[str] = ""
+
+@app.put("/api/auth/profile-settings")
+async def update_profile_settings(req: ProfileSettingsRequest, user: dict = Depends(get_current_user)):
+    name = (req.name or "").strip()
+    email = (req.email or "").strip().lower()
+    address = (req.address or "").strip()
+    contact_number = (req.contact_number or "").strip()
+
+    if not name or len(name) < 2:
+        raise HTTPException(status_code=400, detail="Name must be at least 2 characters long.")
+    if not email or "@" not in email or "." not in email:
+        raise HTTPException(status_code=400, detail="Please enter a valid email address.")
+
+    conn = get_db_connection()
+    cursor = conn.cursor(cursor_factory=RealDictCursor)
+
+    # Check if email is already taken by another account
+    cursor.execute("SELECT id FROM users WHERE LOWER(email) = %s AND id != %s", (email, user['id']))
+    existing = cursor.fetchone()
+    if existing:
+        conn.close()
+        raise HTTPException(status_code=400, detail="This email is already in use by another account.")
+
+    cursor.execute("""
+        UPDATE users 
+        SET name = %s, email = %s, address = %s, contact_number = %s
+        WHERE id = %s
+    """, (name, email, address, contact_number, user['id']))
+
+    log_audit_event(
+        action="profile_settings_update",
+        target_type="user",
+        target_id=user['id'],
+        details=f"User {name} updated account profile settings (email: {email}, contact: {contact_number})",
+        admin_id=user['id'],
+        conn=conn
+    )
+    conn.commit()
+
+    role = user.get('role', 'user')
+    if role in ('admin', 'employer'):
+        cursor.execute(
+            "SELECT id, email, name, role, status, verification_data, rejection_reason, summary, address, contact_number FROM users WHERE id = %s",
+            (user['id'],)
+        )
+    else:
+        cursor.execute("""
+            SELECT id, email, name, role, summary, skills, disabilities, 
+                   disability_profile,
+                   skill_weight, safety_weight, stamina_weight, 
+                   physical_capabilities, preferred_intensity, requires_flexibility,
+                   education, experience, projects, certifications, awards,
+                   auto_generate_resume, address, contact_number
+            FROM users WHERE id = %s
+        """, (user['id'],))
+
+    row = cursor.fetchone()
+    conn.close()
+
+    updated_user = dict(row)
+    if role not in ('admin', 'employer'):
+        try:
+            updated_user['disabilities'] = json.loads(updated_user['disabilities']) if updated_user.get('disabilities') else []
+        except:
+            updated_user['disabilities'] = []
+        try:
+            updated_user['disability_profile'] = json.loads(updated_user['disability_profile']) if updated_user.get('disability_profile') else {}
+        except:
+            updated_user['disability_profile'] = {}
+    else:
+        updated_user['disabilities'] = []
+        try:
+            if isinstance(updated_user.get('verification_data'), str):
+                updated_user['verification_data'] = json.loads(updated_user['verification_data']) if updated_user.get('verification_data') else {}
+            elif updated_user.get('verification_data') is None:
+                updated_user['verification_data'] = {}
+        except:
+            updated_user['verification_data'] = {}
+
+    fresh_token = create_access_token({
+        "sub": updated_user['id'],
+        "email": updated_user['email'],
+        "name": updated_user['name'],
+        "role": updated_user['role']
+    })
+
+    return {
+        "message": "Profile settings updated successfully.",
+        "user": updated_user,
+        "token": fresh_token
+    }
+
 class ChangePasswordRequest(BaseModel):
     old_password: str
     new_password: str
 
 @app.post("/api/auth/change-password")
 async def change_password(req: ChangePasswordRequest, user: dict = Depends(get_current_user)):
+    if len(req.new_password) < 6:
+        raise HTTPException(status_code=400, detail="New password must be at least 6 characters.")
     conn = get_db_connection()
     cursor = conn.cursor(cursor_factory=RealDictCursor)
     cursor.execute("SELECT password_hash FROM users WHERE id = %s", (user['id'],))
@@ -1535,7 +1640,7 @@ async def get_me(user: dict = Depends(get_current_user)):
         
         if role in ('admin', 'employer'):
             cursor.execute(
-                "SELECT id, email, name, role, status, verification_data, rejection_reason, summary FROM users WHERE id = %s",
+                "SELECT id, email, name, role, status, verification_data, rejection_reason, summary, address, contact_number FROM users WHERE id = %s",
                 (user['id'],)
             )
             row = cursor.fetchone()
@@ -1546,7 +1651,7 @@ async def get_me(user: dict = Depends(get_current_user)):
                        skill_weight, safety_weight, stamina_weight, 
                        physical_capabilities, preferred_intensity, requires_flexibility,
                        education, experience, projects, certifications, awards,
-                       auto_generate_resume
+                       auto_generate_resume, address, contact_number
                 FROM users WHERE id = %s
             """, (user['id'],))
             row = cursor.fetchone()
@@ -1841,7 +1946,7 @@ async def update_pwd_profile(req: ProfileUpdate, user: dict = Depends(RoleChecke
                skill_weight, safety_weight, stamina_weight, 
                physical_capabilities, preferred_intensity, requires_flexibility,
                education, experience, projects, certifications, awards,
-               auto_generate_resume
+               auto_generate_resume, address, contact_number
         FROM users WHERE id = %s
     """, (user['id'],))
     row = cursor.fetchone()
