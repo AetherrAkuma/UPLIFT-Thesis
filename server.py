@@ -591,7 +591,7 @@ def clear_failed_login(key: str):
     _failed_login_attempts.pop(key, None)
 
 SITEVERIFY_URL = "https://challenges.cloudflare.com/turnstile/v0/siteverify"
-DEFAULT_TURNSTILE_HOSTNAMES = {"uplift.ragetech.dev", "localhost", "127.0.0.1"}
+DEFAULT_TURNSTILE_HOSTNAMES = {"uplift.rgctech.dev", "uplift.ragetech.dev", "localhost", "127.0.0.1"}
 # Cloudflare documents tokens as single-use, but siteverify accepted replays
 # within the token's 5-minute window during on-machine validation (2026-10-17).
 # Enforce single-use server-side: remember redeemed token digests for 10 minutes.

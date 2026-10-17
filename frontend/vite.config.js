@@ -8,6 +8,7 @@ export default defineConfig({
     react(),
     tailwindcss(),
   ],
+  envDir: '../',
   resolve: {
     dedupe: ['react', 'react-dom']
   },
