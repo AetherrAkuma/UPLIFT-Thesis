@@ -6,6 +6,7 @@ Uses RenderCV's Python API directly: builds the data model from user
 profile fields, generates Typst source, then compiles to PDF.
 """
 import json
+import re
 import base64
 import tempfile
 import logging
@@ -51,9 +52,20 @@ def generate_resume(
         input_path.write_text(yaml_content, encoding="utf-8")
 
         try:
-            _, model = build_rendercv_dictionary_and_model(
-                yaml_content, input_file_path=input_path
-            )
+            try:
+                _, model = build_rendercv_dictionary_and_model(
+                    yaml_content, input_file_path=input_path
+                )
+            except Exception as build_err:
+                logger.warning(f"Initial RenderCV validation failed ({build_err}), retrying without optional phone field...")
+                safe_profile = dict(user_profile)
+                safe_profile.pop("phone", None)
+                safe_profile.pop("contact_number", None)
+                yaml_content = _build_yaml(safe_profile, theme)
+                input_path.write_text(yaml_content, encoding="utf-8")
+                _, model = build_rendercv_dictionary_and_model(
+                    yaml_content, input_file_path=input_path
+                )
 
             typst_path = generate_typst(model)
             if typst_path is None:
@@ -73,12 +85,45 @@ def generate_resume(
             return None
 
 
+def _is_valid_rendercv_phone(p: Optional[str]) -> bool:
+    if not p:
+        return False
+    try:
+        from pydantic_extra_types.phone_numbers import PhoneNumber
+        PhoneNumber._validate(p, None)
+        return True
+    except Exception:
+        return False
+
+
+def _format_phone(raw_phone: str) -> Optional[str]:
+    if not raw_phone:
+        return None
+    p = str(raw_phone).strip()
+    if not p:
+        return None
+    try:
+        import phonenumbers
+        parsed = phonenumbers.parse(p, "PH")
+        if phonenumbers.is_possible_number(parsed):
+            return phonenumbers.format_number(parsed, phonenumbers.PhoneNumberFormat.INTERNATIONAL)
+    except Exception:
+        pass
+    d = re.sub(r'\D', '', p)
+    if p.startswith('09') and len(d) == 11:
+        return f"+63 {d[1:4]} {d[4:7]} {d[7:]}"
+    if p.startswith('+'):
+        return p
+    return None
+
+
 def _build_yaml(user_profile: dict, theme: str) -> str:
     """Build a RenderCV-compatible YAML string from user profile data."""
     name = (user_profile.get("name") or "Candidate").strip()
     email = (user_profile.get("email") or "").strip()
-    phone = (user_profile.get("phone") or "").strip()
-    location = (user_profile.get("location") or "").strip()
+    raw_phone = (user_profile.get("phone") or user_profile.get("contact_number") or "").strip()
+    formatted_phone = _format_phone(raw_phone)
+    location = (user_profile.get("location") or user_profile.get("address") or "").strip()
 
     sections = {}
 
@@ -130,10 +175,26 @@ def _build_yaml(user_profile: dict, theme: str) -> str:
     lines.append(f"  name: \"{_yaml_escape(name)}\"")
     if email:
         lines.append(f"  email: \"{_yaml_escape(email)}\"")
-    if phone:
-        lines.append(f"  phone: \"{_yaml_escape(phone)}\"")
-    if location:
-        lines.append(f"  location: \"{_yaml_escape(location)}\"")
+
+    if formatted_phone and _is_valid_rendercv_phone(formatted_phone):
+        lines.append(f"  phone: \"{_yaml_escape(formatted_phone)}\"")
+        if location:
+            lines.append(f"  location: \"{_yaml_escape(location)}\"")
+    else:
+        # Fallback to custom_connections to preserve order: phone then location
+        customs = []
+        if raw_phone:
+            customs.append(("phone", raw_phone))
+        if location:
+            customs.append(("location-dot", location))
+
+        if customs:
+            lines.append("  custom_connections:")
+            for icon, val in customs:
+                lines.append(f"    - fontawesome_icon: \"{icon}\"")
+                lines.append(f"      placeholder: \"{_yaml_escape(val)}\"")
+                lines.append("      url: null")
+
     lines.append("  sections:")
 
     if sections:

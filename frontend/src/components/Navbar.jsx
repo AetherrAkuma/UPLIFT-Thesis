@@ -3,7 +3,7 @@ import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { 
     User, LogOut, ChevronDown, Accessibility, Search, Building, 
-    Settings2, Settings, Briefcase, Menu, X, ShieldCheck, Home 
+    Settings2, Settings, Briefcase, Menu, X, ShieldCheck, Home, KeyRound 
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import ProfileSettingsModal from './ProfileSettingsModal';
@@ -133,7 +133,7 @@ const Navbar = () => {
                                                 <p className="text-[11px] font-semibold text-slate-400 truncate">{user.email}</p>
                                             </div>
 
-                                            {/* Profile Settings (Available for all logged-in accounts) */}
+                                            {/* Password & Security (Available for all logged-in accounts) */}
                                             <button 
                                                 onClick={() => {
                                                     setDropdownOpen(false);
@@ -143,7 +143,7 @@ const Navbar = () => {
                                                 className="w-full text-left px-4 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50 flex items-center gap-2.5 transition-colors"
                                                 id="dropdown-profile-settings-btn"
                                             >
-                                                <Settings size={16} className="text-slate-400" aria-hidden="true" /> Profile Settings
+                                                <KeyRound size={16} className="text-slate-400" aria-hidden="true" /> Password & Security
                                             </button>
 
                                             {user.role === 'user' && (
@@ -264,7 +264,7 @@ const Navbar = () => {
                                             }}
                                             className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors text-left"
                                         >
-                                            <Settings size={18} className="text-[#0038A8]" /> Profile Settings
+                                            <KeyRound size={18} className="text-[#0038A8]" /> Password & Security
                                         </button>
                                         <Link 
                                             to="/applications" 
@@ -287,7 +287,7 @@ const Navbar = () => {
                                             }}
                                             className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-xs font-bold text-slate-700 hover:bg-blue-50 hover:text-[#0038A8] transition-colors text-left"
                                         >
-                                            <Settings size={18} className="text-[#0038A8]" /> Profile Settings
+                                            <KeyRound size={18} className="text-[#0038A8]" /> Password & Security
                                         </button>
                                         <Link 
                                             to="/employer" 
@@ -306,7 +306,7 @@ const Navbar = () => {
                                             }}
                                             className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-xs font-bold text-slate-700 hover:bg-blue-50 hover:text-[#0038A8] transition-colors text-left"
                                         >
-                                            <Settings size={18} className="text-[#0038A8]" /> Profile Settings
+                                            <KeyRound size={18} className="text-[#0038A8]" /> Password & Security
                                         </button>
                                         <Link 
                                             to="/admin" 

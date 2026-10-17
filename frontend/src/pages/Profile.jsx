@@ -7,7 +7,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
     User, Briefcase, Sliders, ChevronRight, Save, 
     CheckCircle2, Accessibility, GraduationCap, Building2, Terminal, 
-    Award, Sparkles, LayoutDashboard, Plus, FileText, Trash2, ArrowLeft, ArrowRight, Calendar
+    Award, Sparkles, LayoutDashboard, Plus, FileText, Trash2, ArrowLeft, ArrowRight, Calendar,
+    Mail, Phone, MapPin
 } from 'lucide-react';
 import PDFViewer from '../components/PDFViewer';
 
@@ -156,6 +157,10 @@ const Profile = () => {
     const navigate = useNavigate();
     const toast = useToast();
     const [profile, setProfile] = useState({
+        name: '',
+        email: '',
+        contact_number: '',
+        address: '',
         summary: '',
         skills: '',
         disabilities: [],
@@ -185,6 +190,10 @@ const Profile = () => {
         if (user) {
             // eslint-disable-next-line react-hooks/set-state-in-effect
             setProfile({
+                name: user.name || '',
+                email: user.email || '',
+                contact_number: user.contact_number || '',
+                address: user.address || '',
                 summary: user.summary || '',
                 skills: user.skills || '',
                 disabilities: user.disabilities || [],
@@ -245,6 +254,10 @@ const Profile = () => {
             const joinedSkills = skillEntries.map(s => s.trim()).filter(Boolean).join(', ');
             const res = await axios.put(`${API_BASE_URL}/pwd/profile`, {
                 ...profile,
+                name: profile.name,
+                email: profile.email,
+                contact_number: profile.contact_number,
+                address: profile.address,
                 skills: joinedSkills,
                 experience: expJson,
                 disability_profile: JSON.stringify(disabilityProfile),
@@ -252,7 +265,7 @@ const Profile = () => {
             }, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
-            login(token, res.data.user || res.data); // Update user in context
+            login(res.data.token || token, res.data.user || res.data); // Update user in context
             setSaveStatus('success');
             toast.success("Profile saved successfully!");
             setTimeout(() => setSaveStatus(null), 3000);
@@ -267,7 +280,23 @@ const Profile = () => {
     const handleGenerateResume = async () => {
         setGeneratingResume(true);
         try {
-            const res = await axios.post(`${API_BASE_URL}/resume/generate`, {}, {
+            const expJson = serializeExperience(expEntries);
+            const joinedSkills = skillEntries.map(s => s.trim()).filter(Boolean).join(', ');
+            const res = await axios.post(`${API_BASE_URL}/resume/generate`, {
+                name: profile.name,
+                email: profile.email,
+                contact_number: profile.contact_number,
+                phone: profile.contact_number,
+                address: profile.address,
+                location: profile.address,
+                summary: profile.summary,
+                skills: joinedSkills,
+                experience: expJson,
+                education: educStructured ? JSON.stringify(educEntries) : profile.education,
+                projects: profile.projects,
+                certifications: profile.certifications,
+                awards: profile.awards
+            }, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
             if (res.data.success) {
@@ -398,7 +427,8 @@ const Profile = () => {
             const summaryOk = (profile.summary?.trim() || '').length > 0;
             const capsOk = Object.values(disabilityProfile.capabilities || {}).some(v => v);
             const accOk = (disabilityProfile.accommodations || []).length > 0;
-            return summaryOk || capsOk || accOk;
+            const nameOk = (profile.name?.trim() || '').length > 0;
+            return summaryOk || capsOk || accOk || nameOk;
         }
         if (section.id === 'experience') {
             return expEntries.some(e => (e.company || '').trim().length > 0 || (e.position || '').trim().length > 0 || (e.year || '').trim().length > 0);
@@ -454,6 +484,10 @@ const Profile = () => {
             if (res.data && res.data.success && res.data.data) {
                 const extracted = res.data.data;
                 setParsedData({
+                    name: extracted.name || '',
+                    email: extracted.email || '',
+                    contact_number: extracted.mobile_number || extracted.contact_number || '',
+                    address: extracted.address || '',
                     education: extracted.education || '',
                     experience: extracted.experience || '',
                     skills: extracted.skills || '',
@@ -476,7 +510,11 @@ const Profile = () => {
     const applyParsedData = () => {
         setProfile(prev => ({
             ...prev,
-            ...parsedData
+            ...parsedData,
+            name: parsedData.name || prev.name,
+            email: parsedData.email || prev.email,
+            contact_number: parsedData.contact_number || prev.contact_number,
+            address: parsedData.address || prev.address
         }));
         setShowResumeModal(false);
     };
@@ -758,6 +796,72 @@ const ExpansionPanel = ({ section, isOpen, onToggle, onFinish, profile, setProfi
                         <div className="p-8 pt-4 border-t border-slate-50 space-y-8">
                             {section.id === 'summary' && (
                                 <>
+                                    {/* Personal & Contact Information */}
+                                    <div className="space-y-4">
+                                        <div className="flex items-center justify-between">
+                                            <label className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400">Personal & Contact Details</label>
+                                            <span className="text-[9px] text-slate-300 font-bold">PROFILE INFORMATION</span>
+                                        </div>
+
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            {/* Full Name */}
+                                            <div className="space-y-2">
+                                                <label className="text-xs font-bold text-slate-600 flex items-center gap-1.5">
+                                                    <User size={14} className="text-blue-600" /> Full Name
+                                                </label>
+                                                <input 
+                                                    type="text"
+                                                    value={profile.name || ''}
+                                                    onChange={(e) => setProfile(prev => ({ ...prev, name: e.target.value }))}
+                                                    className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-3.5 text-slate-700 placeholder:text-slate-300 focus:border-blue-500 focus:bg-white focus:outline-none transition-all text-sm font-medium shadow-inner"
+                                                    placeholder="e.g. Juan Dela Cruz"
+                                                />
+                                            </div>
+
+                                            {/* Contact Number */}
+                                            <div className="space-y-2">
+                                                <label className="text-xs font-bold text-slate-600 flex items-center gap-1.5">
+                                                    <Phone size={14} className="text-blue-600" /> Contact Number
+                                                </label>
+                                                <input 
+                                                    type="tel"
+                                                    value={profile.contact_number || ''}
+                                                    onChange={(e) => setProfile(prev => ({ ...prev, contact_number: e.target.value }))}
+                                                    className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-3.5 text-slate-700 placeholder:text-slate-300 focus:border-blue-500 focus:bg-white focus:outline-none transition-all text-sm font-medium shadow-inner"
+                                                    placeholder="e.g. +63 912 345 6789"
+                                                />
+                                            </div>
+
+                                            {/* Email Address */}
+                                            <div className="space-y-2">
+                                                <label className="text-xs font-bold text-slate-600 flex items-center gap-1.5">
+                                                    <Mail size={14} className="text-blue-600" /> Email Address
+                                                </label>
+                                                <input 
+                                                    type="email"
+                                                    value={profile.email || ''}
+                                                    onChange={(e) => setProfile(prev => ({ ...prev, email: e.target.value }))}
+                                                    className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-3.5 text-slate-700 placeholder:text-slate-300 focus:border-blue-500 focus:bg-white focus:outline-none transition-all text-sm font-medium shadow-inner"
+                                                    placeholder="e.g. juan@example.com"
+                                                />
+                                            </div>
+
+                                            {/* Address */}
+                                            <div className="space-y-2">
+                                                <label className="text-xs font-bold text-slate-600 flex items-center gap-1.5">
+                                                    <MapPin size={14} className="text-blue-600" /> Address / Location
+                                                </label>
+                                                <input 
+                                                    type="text"
+                                                    value={profile.address || ''}
+                                                    onChange={(e) => setProfile(prev => ({ ...prev, address: e.target.value }))}
+                                                    className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-3.5 text-slate-700 placeholder:text-slate-300 focus:border-blue-500 focus:bg-white focus:outline-none transition-all text-sm font-medium shadow-inner"
+                                                    placeholder="e.g. Quezon City, Metro Manila"
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
+
                                     <div className="space-y-4">
                                         <div className="flex items-center justify-between">
                                             <label className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400">Professional Summary</label>

@@ -1,4 +1,4 @@
-from fastapi import FastAPI, BackgroundTasks, HTTPException, Request, UploadFile, File
+from fastapi import FastAPI, BackgroundTasks, HTTPException, Request, UploadFile, File, Body
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from typing import List, Optional, Any, Dict, Union
@@ -948,6 +948,10 @@ class SearchRequest(BaseModel):
     use_profile_context: bool = True
 
 class ProfileUpdate(BaseModel):
+    name: Optional[str] = None
+    email: Optional[str] = None
+    contact_number: Optional[str] = None
+    address: Optional[str] = None
     summary: Optional[str] = ""
     skills: Optional[str] = ""
     disabilities: Optional[List[Any]] = []
@@ -1900,6 +1904,17 @@ async def admin_approve_job(job_id: str, background_tasks: BackgroundTasks, user
 async def update_pwd_profile(req: ProfileUpdate, user: dict = Depends(RoleChecker(['user']))):
     conn = get_db_connection()
     cursor = conn.cursor(cursor_factory=RealDictCursor)
+
+    name = (req.name if req.name is not None else user.get('name', '')).strip()
+    email = (req.email if req.email is not None else user.get('email', '')).strip().lower()
+    address = (req.address if req.address is not None else user.get('address', '')).strip()
+    contact_number = (req.contact_number if req.contact_number is not None else user.get('contact_number', '')).strip()
+
+    if email and email != user.get('email', '').lower():
+        cursor.execute("SELECT id FROM users WHERE LOWER(email) = %s AND id != %s", (email, user['id']))
+        if cursor.fetchone():
+            conn.close()
+            raise HTTPException(status_code=400, detail="This email is already in use by another account.")
     
     dp_str = json.dumps(req.disability_profile) if isinstance(req.disability_profile, (dict, list)) else str(req.disability_profile or "{}")
     dis_str = json.dumps(req.disabilities) if isinstance(req.disabilities, list) else str(req.disabilities or "[]")
@@ -1911,7 +1926,8 @@ async def update_pwd_profile(req: ProfileUpdate, user: dict = Depends(RoleChecke
 
     cursor.execute("""
         UPDATE users 
-        SET summary = %s, skills = %s, disabilities = %s, 
+        SET name = %s, email = %s, address = %s, contact_number = %s,
+            summary = %s, skills = %s, disabilities = %s, 
             disability_profile = %s,
             skill_weight = %s, safety_weight = %s, stamina_weight = %s,
             physical_capabilities = %s, preferred_intensity = %s, requires_flexibility = %s,
@@ -1919,6 +1935,10 @@ async def update_pwd_profile(req: ProfileUpdate, user: dict = Depends(RoleChecke
             auto_generate_resume = %s
         WHERE id = %s
     """, (
+        name or user.get('name', ''),
+        email or user.get('email', ''),
+        address,
+        contact_number,
         req.summary or "", req.skills or "", dis_str,
         dp_str,
         req.skill_weight if req.skill_weight is not None else 0.5,
@@ -1933,7 +1953,7 @@ async def update_pwd_profile(req: ProfileUpdate, user: dict = Depends(RoleChecke
         action="profile_update",
         target_type="user",
         target_id=user['id'],
-        details=f"Candidate {user['name']} updated career profile and vocational preferences.",
+        details=f"Candidate {name or user.get('name', '')} updated career profile and personal details.",
         admin_id=user['id'],
         conn=conn
     )
@@ -1962,7 +1982,14 @@ async def update_pwd_profile(req: ProfileUpdate, user: dict = Depends(RoleChecke
     except:
         updated_user['disability_profile'] = {}
         
-    return {"message": "Profile updated successfully.", "user": updated_user}
+    fresh_token = create_access_token({
+        "sub": updated_user['id'],
+        "email": updated_user['email'],
+        "name": updated_user['name'],
+        "role": updated_user['role']
+    })
+
+    return {"message": "Profile updated successfully.", "user": updated_user, "token": fresh_token}
 
 # ==========================================
 # "Why matched?" report cache (DB-backed)
@@ -3074,17 +3101,21 @@ async def submit_verification(req: dict, user: dict = Depends(RoleChecker(['empl
 # ==========================================
 
 @app.post("/api/resume/generate")
-async def generate_resume_endpoint(user: dict = Depends(RoleChecker(['user']))):
+async def generate_resume_endpoint(
+    req: Optional[dict] = Body(default=None),
+    user: dict = Depends(RoleChecker(['user']))
+):
     """Generate an ATS-friendly PDF resume for the current user."""
     conn = get_db_connection()
     cursor = conn.cursor(cursor_factory=RealDictCursor)
     
     cursor.execute("""
         SELECT id, email, name, role, summary, skills, 
-               education, experience, projects, certifications, awards
+               education, experience, projects, certifications, awards,
+               address, contact_number
         FROM users WHERE id = %s
     """, (user['id'],))
-    profile = cursor.fetchone()
+    db_profile = cursor.fetchone()
     
     cursor.execute("SELECT value FROM system_settings WHERE key = 'resume_theme'")
     theme_row = cursor.fetchone()
@@ -3092,10 +3123,16 @@ async def generate_resume_endpoint(user: dict = Depends(RoleChecker(['user']))):
     
     conn.close()
     
-    if not profile:
+    profile_data = dict(db_profile) if db_profile else {}
+    if req and isinstance(req, dict):
+        for k, v in req.items():
+            if v is not None and v != "":
+                profile_data[k] = v
+
+    if not profile_data:
         return {"success": False, "error": "User not found"}
     
-    result = generate_resume(dict(profile), theme)
+    result = generate_resume(profile_data, theme)
     if result:
         return {"success": True, "resume_base64": result}
     else:
