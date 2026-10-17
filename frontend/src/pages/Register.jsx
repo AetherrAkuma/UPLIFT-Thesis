@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import axios from 'axios';
@@ -9,6 +9,8 @@ import {
     Award, HelpCircle
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import TurnstileWidget from '../components/TurnstileWidget';
+
 
 const DISABILITY_CATEGORIES = {
     'Physical': ['Wheelchair User', 'Amputee', 'Cerebral Palsy', 'Muscular Dystrophy', 'Chronic Pain', 'Other'],
@@ -146,6 +148,9 @@ const Register = () => {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
     const [successMessage, setSuccessMessage] = useState('');
+    const [turnstileToken, setTurnstileToken] = useState('');
+    const turnstileRef = useRef(null);
+
 
     // Step 1: Account Info
     const [name, setName] = useState('');
@@ -291,6 +296,12 @@ const Register = () => {
     const handleSubmit = async (e) => {
         if (e) e.preventDefault();
         setError('');
+
+        if (!turnstileToken) {
+            setError('Please complete the security verification challenge before submitting.');
+            return;
+        }
+
         setLoading(true);
 
         try {
@@ -301,7 +312,8 @@ const Register = () => {
                 role: 'user',
                 disability_profile: JSON.stringify({ disabilities: regDisabilities }),
                 education: JSON.stringify(regEducation),
-                skills: regSkills.trim()
+                skills: regSkills.trim(),
+                turnstile_token: turnstileToken
             };
 
             // 1. Create account
@@ -323,10 +335,15 @@ const Register = () => {
             setCurrentStep(6);
         } catch (err) {
             setError(err.response?.data?.detail || 'Registration encountered an error. Please try again.');
+            if (turnstileRef.current?.reset) {
+                turnstileRef.current.reset();
+            }
+            setTurnstileToken('');
         } finally {
             setLoading(false);
         }
     };
+
 
     return (
         <div className="min-h-screen bg-slate-50/70 flex flex-col font-sans selection:bg-blue-100 text-slate-800">
@@ -1136,9 +1153,28 @@ const Register = () => {
                                             Edit
                                         </button>
                                     </div>
+
+                                    {/* Security Verification */}
+                                    <div className="pt-4 border-t border-slate-200">
+                                        <div className="text-center mb-2">
+                                            <span className="text-[11px] font-black uppercase tracking-wider text-slate-500">
+                                                Bot Protection & Security Verification
+                                            </span>
+                                        </div>
+                                        <TurnstileWidget
+                                            ref={turnstileRef}
+                                            action="candidate_register"
+                                            onVerify={(tok) => {
+                                                setTurnstileToken(tok);
+                                                setError('');
+                                            }}
+                                            onExpire={() => setTurnstileToken('')}
+                                        />
+                                    </div>
                                 </div>
                             </div>
                         </motion.section>
+
                     )}
 
                     {/* STEP 6: Celebratory Success Screen with Auto-Redirect */}
@@ -1223,10 +1259,11 @@ const Register = () => {
                             ) : (
                                 <button
                                     type="button"
-                                    disabled={loading}
+                                    disabled={loading || !turnstileToken}
                                     onClick={handleSubmit}
-                                    className="flex-1 py-4 rounded-2xl font-black text-xs uppercase tracking-wider bg-emerald-600 text-white hover:bg-emerald-700 transition-all flex items-center justify-center gap-2 shadow-lg shadow-emerald-200 disabled:opacity-50"
+                                    className="flex-1 py-4 rounded-2xl font-black text-xs uppercase tracking-wider bg-emerald-600 text-white hover:bg-emerald-700 transition-all flex items-center justify-center gap-2 shadow-lg shadow-emerald-200 disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
+
                                     {loading ? (
                                         <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                                     ) : (

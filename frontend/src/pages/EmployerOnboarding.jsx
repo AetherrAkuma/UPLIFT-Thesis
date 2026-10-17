@@ -1,4 +1,4 @@
-import { useState, Fragment } from 'react';
+import { useState, useRef, Fragment } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
@@ -8,6 +8,7 @@ import {
     Sparkles
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import TurnstileWidget from '../components/TurnstileWidget';
 
 const EmployerOnboarding = () => {
     const navigate = useNavigate();
@@ -15,6 +16,9 @@ const EmployerOnboarding = () => {
     const [step, setStep] = useState(1);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
+    const [turnstileToken, setTurnstileToken] = useState('');
+    const turnstileRef = useRef(null);
+
     
     // Form States
     const [formData, setFormData] = useState({
@@ -35,16 +39,23 @@ const EmployerOnboarding = () => {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-        setLoading(true);
         setError('');
+
+        if (!turnstileToken) {
+            setError('Please complete the security verification challenge before continuing.');
+            return;
+        }
+
+        setLoading(true);
         
         try {
-            // 1. Register Account
+            // 1. Register Account with Turnstile verification
             await axios.post(`${API_BASE_URL}/auth/register/employer`, {
                 email: formData.email,
                 password: formData.password,
                 name: formData.company_name, // User name as company name
-                role: 'employer'
+                role: 'employer',
+                turnstile_token: turnstileToken
             });
 
             // 2. Login immediately to get token
@@ -74,10 +85,15 @@ const EmployerOnboarding = () => {
             setStep(4);
         } catch (err) {
             setError(err.response?.data?.detail || "Onboarding failed. Please try again.");
+            if (turnstileRef.current?.reset) {
+                turnstileRef.current.reset();
+            }
+            setTurnstileToken('');
         } finally {
             setLoading(false);
         }
     };
+
 
     return (
         <div className="min-h-screen bg-white flex flex-col font-sans selection:bg-blue-100">
@@ -196,16 +212,32 @@ const EmployerOnboarding = () => {
 
                                     {error && <p className="text-center text-red-500 text-xs font-bold bg-red-50 p-4 rounded-2xl">{error}</p>}
 
+                                    <div className="pt-2">
+                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest text-center mb-1">
+                                            Security Verification
+                                        </p>
+                                        <TurnstileWidget
+                                            ref={turnstileRef}
+                                            action="employer_register"
+                                            onVerify={(tok) => {
+                                                setTurnstileToken(tok);
+                                                setError('');
+                                            }}
+                                            onExpire={() => setTurnstileToken('')}
+                                        />
+                                    </div>
+
                                     <div className="flex gap-4">
                                         <button onClick={handleBack} className="flex-1 py-5 bg-white border border-slate-200 text-slate-400 rounded-[2rem] font-black text-[10px] uppercase tracking-widest">Back</button>
                                         <button 
                                             onClick={handleSubmit}
-                                            disabled={loading}
-                                            className="flex-[2] py-5 bg-[#0038A8] text-white rounded-[2rem] font-black text-sm uppercase tracking-widest hover:bg-blue-800 transition-all flex items-center justify-center gap-3 shadow-xl shadow-blue-100 disabled:opacity-50"
+                                            disabled={loading || !turnstileToken}
+                                            className="flex-[2] py-5 bg-[#0038A8] text-white rounded-[2rem] font-black text-sm uppercase tracking-widest hover:bg-blue-800 transition-all flex items-center justify-center gap-3 shadow-xl shadow-blue-100 disabled:opacity-50 disabled:cursor-not-allowed"
                                         >
                                             {loading ? "Processing..." : "Complete Application"} <Sparkles size={18} />
                                         </button>
                                     </div>
+
                                 </div>
                             </motion.div>
                         )}

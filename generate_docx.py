@@ -260,7 +260,7 @@ add_heading('3.1 Final App Overview', level=2)
 add_mixed_para([('App Name: ', True), ('UPLIFT Mobile', False)])
 add_mixed_para([('Purpose: ', True), ('AI-powered job matching platform for Persons with Disabilities (PWDs)', False)])
 add_mixed_para([('Platform: ', True), ('MIT App Inventor (Android)', False)])
-add_mixed_para([('Backend: ', True), ('UPLIFT — Python FastAPI server with PostgreSQL, pgvector, SentenceTransformer, CrossEncoder, Flan-T5', False)])
+add_mixed_para([('Backend: ', True), ('UPLIFT — Python FastAPI server with PostgreSQL, pgvector, SentenceTransformer, CrossEncoder, Qwen2.5-1.5B-Instruct (GGUF)', False)])
 add_mixed_para([('Total Screens: ', True), ('9', False)])
 
 add_bold_para('User Flow:')
@@ -274,7 +274,7 @@ add_table(
         ['User Authentication', 'Complete', 'Login with JWT, registration, session persistence via TinyDB, auto-login'],
         ['Profile Management', 'Complete', 'View/edit summary, skills, disabilities; save to backend + cache locally'],
         ['AI Job Matching', 'Complete', 'Semantic search, cross-encoder re-ranking, weighted scoring'],
-        ['Job Details & AI Report', 'Complete', 'Safety/Skill/Stamina scores, Flan-T5 analysis, barrier warnings'],
+        ['Job Details & AI Report', 'Complete', 'Safety/Skill/Stamina scores, Qwen2.5 analysis, barrier warnings'],
         ['Job Application', 'Complete', 'One-tap apply with auto-generated resume; duplicate detection'],
         ['Saved Jobs (Favorites)', 'Complete', 'Offline-capable; save, view, remove, clear all'],
         ['Application Drafts', 'Complete', 'Per-job notes; save, load, delete; persists in TinyDB'],

@@ -51,13 +51,35 @@ aif360==0.6.1
 PyJWT>=2.8.0
 python-docx>=1.1.0
 
+# Grounded "Why matched?" verbalizer (small local GGUF LLM running on llama.cpp).
+# There is no prebuilt wheel for Windows on PyPI, so the CPU wheel index is
+# declared INLINE below: a plain "pip install -r requirements.txt" then works
+# everywhere without needing a C++ compiler.
+--extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu
+llama-cpp-python==0.3.36
+
 # Resume Parsing & Rendering Engine
 pydparser>=1.0.4
 spacy>=3.7.2
 nltk>=3.8.1
 docx2txt>=0.8
 pdfminer.six>=20221105
-rendercv[full]>=2.8
+# datasets (pinned to 2.16.0 by pydparser; also imported by sentence-transformers)
+# needs pyarrow. Newest pyarrow requires NumPy 2.0 at import time, but thinc
+# (from the spacy 3.7.2 pin) caps NumPy at 1.26.x - keep pyarrow in the
+# NumPy 1.26 era. 15.0.2 matches the datasets 2.16.0 timeframe.
+pyarrow==15.0.2
+# render_engine.py uses the RenderCV 2.8+ Python API (needs Python 3.12+;
+#   older rendercv releases lack the module layout it imports - verified).
+# Deliberately NOT rendercv[full]: that extra pins typer>=0.24.1, which cannot
+#   coexist with pydparser's exact spacy==3.7.2 pin (spacy 3.7.x needs
+#   typer<0.10). typer/watchdog only power RenderCV's command-line interface,
+#   which UPLIFT never invokes - the render-critical pieces its own code
+#   imports (typst PDF engine + fonts, per rendercv/renderer/pdf_png.py) are
+#   declared explicitly below.
+rendercv>=2.8
+typst>=0.14.8
+rendercv-fonts>=0.5.1
 python-dotenv>=1.0.0
 python-multipart>=0.0.12
 https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.7.1/en_core_web_sm-3.7.1-py3-none-any.whl

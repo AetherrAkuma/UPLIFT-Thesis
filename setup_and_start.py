@@ -136,12 +136,46 @@ def free_port_if_occupied(port, service_name="Service"):
     except Exception as e:
         print(f"[WARNING] Could not auto-clear port {port}: {e}")
 
+def release_venv_locks(venv_path=".venv"):
+    """
+    Best-effort Windows helper: terminate leftover python processes (typically an
+    editor's language server) whose command line points inside the given venv.
+    Without this, .venv\\Scripts\\python.exe stays locked and the auto-repair
+    rebuild would leave a half-deleted virtual environment behind.
+    """
+    if os.name != "nt":
+        return
+    # Regex matching this venv's absolute path, tolerating either path separator.
+    parts = [p for p in os.path.abspath(venv_path).split(os.sep) if p]
+    frag = "[\\\\/]+".join(re.escape(p) for p in parts)
+    ps = (
+        "$m = Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -and ($_.CommandLine -match '" + frag + "') }; "
+        "foreach ($p in $m) { if ($p.Name -match '^py.*\\.exe$') { Stop-Process -Id $p.ProcessId -Force -ErrorAction SilentlyContinue; "
+        "Write-Host ('released ' + $p.ProcessId + ' ' + $p.Name) } }"
+    )
+    try:
+        out = subprocess.run(
+            ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps],
+            capture_output=True, text=True, timeout=25,
+        )
+        for line in (out.stdout or "").splitlines():
+            if line.strip():
+                print(f"[AUTO-REPAIR] Releasing locked venv process: {line.strip()}")
+    except Exception:
+        pass
+
 def check_venv(venv_path=".venv"):
     """
     Validates the local virtual environment.
     If .venv is missing, broken, or migrated from another machine with invalid paths,
     it automatically cleans up and recreates a fresh virtual environment.
+    The environment must use Python 3.12 (required by requirements.txt).
     """
+    if sys.version_info[:2] != (3, 12):
+        print(f"[ERROR] This launcher must run under Python 3.12 (current: {sys.version_info.major}.{sys.version_info.minor}).")
+        print("        Run start.bat instead - it locates or installs Python 3.12 automatically.")
+        sys.exit(1)
+
     python_exe = os.path.join(venv_path, "Scripts", "python.exe")
     pip_exe = os.path.join(venv_path, "Scripts", "pip.exe")
     cfg_file = os.path.join(venv_path, "pyvenv.cfg")
@@ -163,22 +197,43 @@ def check_venv(venv_path=".venv"):
                 stderr=subprocess.DEVNULL,
                 timeout=6
             )
-            if test_res.returncode == 0 and pip_res.returncode == 0:
+            # 3. Enforce the Python version required by requirements.txt:
+            #    rendercv 2.8+ (resume renderer) needs 3.12, and the pinned
+            #    spacy 3.7.x stack has no wheels beyond 3.12.
+            ver_res = subprocess.run(
+                [python_exe, "-c", "import sys; sys.exit(0 if sys.version_info[:2] == (3, 12) else 1)"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                timeout=6
+            )
+            if test_res.returncode == 0 and pip_res.returncode == 0 and ver_res.returncode == 0:
                 is_valid = True
         except Exception:
             is_valid = False
 
     if not is_valid:
         if os.path.exists(venv_path):
-            print(f"[AUTO-REPAIR] Existing virtual environment at '{venv_path}' is corrupted or copied from another PC.")
-            print("[INFO] Rebuilding clean virtual environment for this machine...")
-            try:
+            print(f"[AUTO-REPAIR] Existing virtual environment at '{venv_path}' is corrupted, outdated (wrong Python version), or copied from another PC.")
+            print("[INFO] Rebuilding a clean Python 3.12 virtual environment for this machine...")
+            removed = False
+            for attempt in range(1, 4):
                 shutil.rmtree(venv_path, ignore_errors=True)
-            except Exception as e:
-                print(f"[WARNING] Could not completely remove old .venv directory: {e}")
+                if not os.path.exists(venv_path):
+                    removed = True
+                    break
+                if attempt < 3:
+                    # A half-deleted venv on Windows almost always means an editor's
+                    # language server (python.exe inside .venv) is still holding files.
+                    release_venv_locks(venv_path)
+                    time.sleep(1.5)
+            if not removed:
+                print("[ERROR] Could not fully remove the old .venv: it is locked by another program")
+                print("        (usually your editor - VS Code / Antigravity - with this project open).")
+                print("        Close the editor, then run start.bat again.")
+                sys.exit(1)
         else:
             print("[INFO] Creating virtual environment (.venv)...")
-            
+
         subprocess.run([sys.executable, "-m", "venv", venv_path], check=True)
         python_exe = os.path.join(venv_path, "Scripts", "python.exe")
         print("[SUCCESS] Virtual environment initialized.")
@@ -220,8 +275,15 @@ def verify_and_install_deps(venv_python):
         
         print("[INFO] Installing dependencies from requirements.txt (this may take a few minutes on first run)...")
         req_path = os.path.join(os.getcwd(), "requirements.txt")
-        subprocess.run([venv_python, "-m", "pip", "install", "-r", req_path], check=True)
-        print("[SUCCESS] All Python requirements installed.")
+        try:
+            subprocess.run([venv_python, "-m", "pip", "install", "-r", req_path], check=True)
+            print("[SUCCESS] All Python requirements installed.")
+        except subprocess.CalledProcessError:
+            # Never let a single optional package (e.g. llama-cpp-python on an
+            # unsupported platform) abort the whole launcher: the server
+            # degrades gracefully when optional parts are missing.
+            print("[WARNING] One or more packages failed to install (review the pip output above).")
+            print("[INFO] Continuing; optional features will fall back gracefully.")
     else:
         print("[SUCCESS] All core Python dependencies are present.")
 
@@ -254,6 +316,44 @@ def verify_and_install_deps(venv_python):
             [venv_python, "-c", "import nltk; nltk.download('stopwords', quiet=True); nltk.download('words', quiet=True); nltk.download('punkt', quiet=True); nltk.download('punkt_tab', quiet=True); nltk.download('averaged_perceptron_tagger', quiet=True)"],
             check=False
         )
+
+    # 3. Verify the Why-matched verbalizer dependency (llama-cpp-python).
+    #    There is no prebuilt wheel for Windows on PyPI, so install the CPU
+    #    wheel index explicitly when missing. Failure is NON-fatal: without it
+    #    the "Why matched?" cards use the deterministic plain-language draft
+    #    text (same facts, no AI rephrasing).
+    llama_probe = subprocess.run([venv_python, "-c", "import llama_cpp"], capture_output=True)
+    if llama_probe.returncode == 0:
+        print("[SUCCESS] Why-matched verbalizer dependency (llama-cpp-python) present.")
+    else:
+        print("[INFO] Installing llama-cpp-python (pre-built CPU wheel)...")
+        llama_install = subprocess.run(
+            [venv_python, "-m", "pip", "install", "llama-cpp-python==0.3.36",
+             "--extra-index-url", "https://abetlen.github.io/llama-cpp-python/whl/cpu"],
+            check=False,
+        )
+        if llama_install.returncode == 0:
+            print("[SUCCESS] llama-cpp-python installed.")
+        else:
+            print("[WARNING] llama-cpp-python could not be installed on this machine.")
+            print("[WARNING] 'Why matched?' will use deterministic plain-language text (still fully functional).")
+
+    # 4. Check for the optional Why-matched GGUF model weights.
+    #    Note: llama-cpp-python runs any GGUF model - ours is Qwen2.5-1.5B.
+    gguf_dir = os.path.join(os.getcwd(), "model_cache", "gguf")
+    has_gguf = False
+    if os.path.isdir(gguf_dir):
+        has_gguf = any(
+            f.lower().endswith(".gguf")
+            for _r, _d, files in os.walk(gguf_dir)
+            for f in files
+        )
+    if has_gguf:
+        print("[SUCCESS] Why-matched verbalizer model present (local GGUF found).")
+    else:
+        print("[NOTICE] Optional AI model for 'Why matched?' is not downloaded.")
+        print("         The feature stays accurate and simple (deterministic drafts) without it.")
+        print("         To enable the AI rephrasing:  python download_whymatched_model.py")
 
 def try_start_postgres_service():
     """Detects and attempts to start the PostgreSQL Windows Service if stopped."""
@@ -538,7 +638,7 @@ def main():
         print_banner("Preflight System Check Completed Successfully!")
         print(" All prerequisites verified:")
         print("   [X] Virtual environment (.venv) configured & healthy")
-        print("   [X] Python dependencies & AI model weights checked")
+        print("   [X] Python dependencies verified (incl. Why-matched verbalizer check)")
         print("   [X] PostgreSQL database & pgvector extension active")
         print(f"   [X] Web frontend {'ready' if frontend_ready else 'Node.js missing (optional)'}")
         print(" System is ready to launch via start.bat!")

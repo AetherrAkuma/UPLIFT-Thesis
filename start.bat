@@ -11,9 +11,9 @@ echo =======================================================================
 :detect_python
 set "PYTHON_EXE="
 
-rem 1. Check py launcher with specific 3.11 / 3.12 / 3.10 versions
-for %%v in (-3.11 -3.12 -3.10 -3) do (
-    py %%v -c "import sys; sys.exit(0 if sys.version_info >= (3, 10) else 1)" >nul 2>&1
+rem 1. Check py launcher for the required Python 3.12
+for %%v in (-3.12 -3) do (
+    py %%v -c "import sys; sys.exit(0 if sys.version_info[:2] == (3, 12) else 1)" >nul 2>&1
     if !errorlevel! equ 0 (
         set "PYTHON_EXE=py %%v"
         goto :python_found
@@ -21,44 +21,44 @@ for %%v in (-3.11 -3.12 -3.10 -3) do (
 )
 
 rem 2. Check general 'py' command
-py -c "import sys; sys.exit(0 if sys.version_info >= (3, 10) else 1)" >nul 2>&1
+py -c "import sys; sys.exit(0 if sys.version_info[:2] == (3, 12) else 1)" >nul 2>&1
 if %errorlevel% equ 0 (
     set "PYTHON_EXE=py"
     goto :python_found
 )
 
 rem 3. Check 'python' command (ensuring it is not a Windows Store dummy alias)
-python -c "import sys; sys.exit(0 if sys.version_info >= (3, 10) else 1)" >nul 2>&1
+python -c "import sys; sys.exit(0 if sys.version_info[:2] == (3, 12) else 1)" >nul 2>&1
 if %errorlevel% equ 0 (
     set "PYTHON_EXE=python"
     goto :python_found
 )
 
 rem 4. Check 'python3' command
-python3 -c "import sys; sys.exit(0 if sys.version_info >= (3, 10) else 1)" >nul 2>&1
+python3 -c "import sys; sys.exit(0 if sys.version_info[:2] == (3, 12) else 1)" >nul 2>&1
 if %errorlevel% equ 0 (
     set "PYTHON_EXE=python3"
     goto :python_found
 )
 
 rem 5. Check common installation directories
-for %%v in (312 311 310 313) do (
+for %%v in (312) do (
     if exist "%LOCALAPPDATA%\Programs\Python\Python%%v\python.exe" (
-        "%LOCALAPPDATA%\Programs\Python\Python%%v\python.exe" -c "import sys; sys.exit(0 if sys.version_info >= (3, 10) else 1)" >nul 2>&1
+        "%LOCALAPPDATA%\Programs\Python\Python%%v\python.exe" -c "import sys; sys.exit(0 if sys.version_info[:2] == (3, 12) else 1)" >nul 2>&1
         if !errorlevel! equ 0 (
             set "PYTHON_EXE=%LOCALAPPDATA%\Programs\Python\Python%%v\python.exe"
             goto :python_found
         )
     )
     if exist "C:\Python%%v\python.exe" (
-        "C:\Python%%v\python.exe" -c "import sys; sys.exit(0 if sys.version_info >= (3, 10) else 1)" >nul 2>&1
+        "C:\Python%%v\python.exe" -c "import sys; sys.exit(0 if sys.version_info[:2] == (3, 12) else 1)" >nul 2>&1
         if !errorlevel! equ 0 (
             set "PYTHON_EXE=C:\Python%%v\python.exe"
             goto :python_found
         )
     )
     if exist "%ProgramFiles%\Python%%v\python.exe" (
-        "%ProgramFiles%\Python%%v\python.exe" -c "import sys; sys.exit(0 if sys.version_info >= (3, 10) else 1)" >nul 2>&1
+        "%ProgramFiles%\Python%%v\python.exe" -c "import sys; sys.exit(0 if sys.version_info[:2] == (3, 12) else 1)" >nul 2>&1
         if !errorlevel! equ 0 (
             set "PYTHON_EXE=%ProgramFiles%\Python%%v\python.exe"
             goto :python_found
@@ -69,9 +69,10 @@ for %%v in (312 311 310 313) do (
 :python_not_found
 echo.
 echo =======================================================================
-echo   [!] Python v3.10 or higher was not detected on this system.
+echo   [!] Python 3.12 was not detected on this system.
 echo =======================================================================
-echo   UPLIFT requires Python 3.10 - 3.12 to run its AI services and API.
+echo   UPLIFT requires Python 3.12: its resume-rendering engine and the
+echo   pinned AI library stack are built and validated for 3.12.
 echo.
 
 where winget >nul 2>&1
@@ -79,7 +80,7 @@ if %errorlevel% equ 0 (
     echo   [AUTO-REPAIR AVAILABLE]
     echo   Windows Package Manager winget is detected on your PC!
     echo.
-    echo   [1] Automatically install Python 3.11 now via winget - Recommended
+    echo   [1] Automatically install Python 3.12 now via winget - Recommended
     echo   [2] Open Python official download page in browser
     echo   [3] Exit
     echo.
@@ -94,27 +95,27 @@ if %errorlevel% equ 0 (
 
 :install_python_winget
 echo.
-echo [INFO] Installing Python 3.11 via Windows Package Manager...
+echo [INFO] Installing Python 3.12 via Windows Package Manager...
 echo Please accept any Windows UAC administrator prompt if it appears.
 echo.
-winget install Python.Python.3.11 -e --scope currentuser --accept-package-agreements --accept-source-agreements
+winget install Python.Python.3.12 -e --scope currentuser --accept-package-agreements --accept-source-agreements
 if %errorlevel% neq 0 (
     echo [WARNING] Winget installation encountered an issue or was cancelled.
     goto :open_python_browser
 )
-echo [SUCCESS] Python 3.11 installation completed!
-set "PATH=%PATH%;%LOCALAPPDATA%\Programs\Python\Python311;%LOCALAPPDATA%\Programs\Python\Python311\Scripts"
+echo [SUCCESS] Python 3.12 installation completed!
+set "PATH=%PATH%;%LOCALAPPDATA%\Programs\Python\Python312;%LOCALAPPDATA%\Programs\Python\Python312\Scripts"
 for /f "tokens=2*" %%a in ('reg query "HKCU\Environment" /v Path 2^>nul') do set "PATH=!PATH!;%%b"
 goto :detect_python
 
 :open_python_browser
 echo.
-echo [INFO] Opening official Python 3.11 download page in your browser...
-start https://www.python.org/downloads/release/python-3119/
+echo [INFO] Opening official Python 3.12 download page in your browser...
+start https://www.python.org/downloads/release/python-31210/
 echo.
 echo =======================================================================
 echo   MANUAL INSTALLATION GUIDE:
-echo   1. Run the downloaded installer python-3.11.x-amd64.exe.
+echo   1. Run the downloaded installer python-3.12.x-amd64.exe.
 echo   2. *** CRITICAL STEP ***:
 echo      At the very bottom of the installer window, check the box:
 echo      [X] "Add python.exe to PATH"

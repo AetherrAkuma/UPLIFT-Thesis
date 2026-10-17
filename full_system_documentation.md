@@ -7,7 +7,7 @@
 The UPLIFT system is designed as an AI-heavy vocational engine. Unlike traditional web applications, it maintains multiple transformer models in memory for real-time semantic analysis.
 
 - **Software Rationale**: **Python (FastAPI)** was selected as the backend orchestrator due to its first-class support for AI/ML libraries and asynchronous handling of long-running ingestion tasks. **React (Vite)** powers the frontend to provide a highly responsive, component-based interface that is essential for implementing complex accessibility features (WCAG 2.1).
-- **Hardware Rationale**: A minimum of **16GB RAM** is strongly recommended. This is because the system loads three distinct AI models: a Bi-Encoder for search, a Cross-Encoder for validation, and a Large Language Model (Flan-T5) for generative reporting. These models collectively require significant memory overhead to ensure "search-engine fast" response times without disk swapping. A **Quad-core processor** is necessary to handle the parallel processing required by the FAISS vector engine during high-concurrency searches.
+- **Hardware Rationale**: A minimum of **16GB RAM** is strongly recommended. This is because the system loads three distinct AI models: a Bi-Encoder for search, a Cross-Encoder for validation, and a Large Language Model (Qwen2.5-1.5B-Instruct) for grounded narrative reporting. These models collectively require significant memory overhead to ensure "search-engine fast" response times without disk swapping. A **Quad-core processor** is necessary to handle the parallel processing required by the FAISS vector engine during high-concurrency searches.
 
 | Category           | Specification             | Narrative                                                                              |
 | :----------------- | :------------------------ | :------------------------------------------------------------------------------------- |
@@ -143,24 +143,21 @@ The Dataware layer of UPLIFT is a **Hybrid Relational-Vector system**.
 
 ### Technical Detail: AI Ingestion (P2)
 
-- **Model Architecture**: Google's `Flan-T5-Base` (**Seq2Seq Transformer**).
-- **Method**: **Zero-Shot Task Instruction**.
+- **Model Architecture**: `Qwen2.5-1.5B-Instruct` (**decoder-only Instruct LLM, Q4_K_M GGUF** via `llama-cpp-python`). The same single local model also powers the "Why matched?" narrative layer.
+- **Method**: **Strict-Format Instruction** (one line only, `temperature 0`).
 - **The Specific Prompt**:
   ```text
   Context: {job_description} {physical_requirements}
   Question: What is the task intensity (Low, Medium, High)? Does it offer schedule flexibility (Yes, No)? List the professional skills.
-  Answer format: Intensity: [type], Flexibility: [Yes/No], Skills: [list]
+  Answer format: Intensity: [Low|Medium|High], Flexibility: [Yes|No], Skills: [comma separated list]
   ```
-- **Post-Inference (Regex Parsing)**: The model's natural language response is parsed via:
-  - `r'Intensity:\s*(\w+)'` -> Extracts Intensity level.
-  - `r'Flexibility:\s*(\w+)'` -> Maps "Yes" to Boolean.
-  - `r'Skills:\s*(.*)'` -> Captures skill strings.
+- **Post-Inference (Label Parsing)**: The one-line response is split into `Intensity` / `Flexibility` / `Skills` values by a tolerant label parser with safe defaults; missing or malformed fields leave the deterministic defaults untouched, so the pipeline never fails on model output.
 
 ### Technical Detail: Suitability Engine (P3)
 
 - **Stage 1 (Retrieval)**: Uses `all-MiniLM-L12-v2` (**Bi-Encoder**) for producing **384-dimensional vectors**. Indexed in **FAISS** via `IndexFlatL2`.
 - **Stage 2 (Re-ranking)**: Uses `ms-marco-MiniLM` (**Cross-Encoder**) for high-fidelity validation. Unlike Bi-Encoders, it processes the User+Job pair as a single input for deeper relationship modeling.
-- **Stage 3 (Synthesis)**: Uses `Flan-T5-Base` to generate a personalized suitability narrative.
+- **Stage 3 (Synthesis)**: Uses `Qwen2.5-1.5B-Instruct` (deterministic grounded drafts + validated plain-English rewrites) to generate a personalized suitability narrative.
 
 ### NLP Conceptual Diagram (The Brain)
 
@@ -172,7 +169,7 @@ subgraph AI_Suite
 direction TB
 M1[Bi-Encoder: all-MiniLM-L12-v2]
 M2[Cross-Encoder: ms-marco-MiniLM]
-M3[Gen-AI: Flan-T5-Base]
+M3[Gen-AI: Qwen2.5-1.5B-Instruct]
 end
 Matcher --> M1
 M1 -- Semantic_Retrieval --> TopK[Top 50 Matches]
@@ -237,7 +234,7 @@ flowchart TD
         Cross --> Math[Scoring: Stamina & Intensity Penalty Logic]
     end
     
-    Math --> Gen[Synthesis: Flan-T5-Base Generative Reasoning]
+    Math --> Gen[Synthesis: Qwen2.5-1.5B Grounded Reasoning]
     Gen --> End[Output: Suitability Dashboard & Match Report]
 ```
 
@@ -247,7 +244,7 @@ flowchart TD
 3.  **Stage 3: High-Speed Retrieval**: When the user searches, the system uses **FAISS** to compare their "Fingerprint" against every job in the database. It instantly retrieves the top 30 most semantically similar jobs.
 4.  **Stage 4: Suitability Audit**: For these 30 jobs, a **Cross-Encoder** performs a side-by-side comparison between the user's specific profile and the job's physical requirements. It looks for "Hidden Barriers" (e.g., a "desk job" requiring frequent transit).
 5.  **Stage 5: Heuristic Scoring**: The system then applies the **Sustainability Math**. It checks if the job's "Task Intensity" matches the user's "Preferred Intensity" and deducts points for burnout risks (e.g., high intensity without schedule flexibility).
-6.  **Stage 6: Generative Synthesis**: Finally, the top results are sent to **Flan-T5-Base**. The AI reads the match data and writes a personalized report explaining *why* the job is suitable, providing career advice and identifying potential challenges.
+6.  **Stage 6: Generative Synthesis**: Finally, the top results are sent to **Qwen2.5-1.5B-Instruct**. The AI reads the match data and writes a personalized report explaining *why* the job is suitable, providing career advice and identifying potential challenges.
 7.  **Stage 7: Interactive Output**: The PWD user sees a list of jobs ranked by their custom weights (Skills vs. Safety vs. Stamina), complete with a "Suitability Report" and a 1-100% Match Score.
 
 ## 9. Summary of Innovation
@@ -265,7 +262,7 @@ To automate the verification of PWD IDs, the system integrates **PaddleOCR-VL** 
     3.  **Security Cross-Check**: Automatically compares the OCR data against the user's registered profile to detect fraud or input errors.
 
 ### B. Performance Optimization (Bottleneck Prevention)
-Given the heavy memory footprint of the existing AI Cluster (Bi-Encoder, Cross-Encoder, Flan-T5), the OCR engine is managed using **Strategic Resource Allocation**:
+Given the heavy memory footprint of the existing AI Cluster (Bi-Encoder, Cross-Encoder, Qwen2.5-1.5B-Instruct), the OCR engine is managed using **Strategic Resource Allocation**:
 
 1.  **Lazy Model Loading**: The OCR weights are not loaded into VRAM/RAM during system startup. The model is initialized only when a user triggers the `upload_id` endpoint.
 2.  **Memory Offloading**: After extraction is complete, the model instance is deleted, and the system calls `gc.collect()` and `torch.cuda.empty_cache()` to free up memory for the Matching Engine.
@@ -284,12 +281,12 @@ When a user clicks "Apply Now," they enter a dual-path vocational branding flow:
 1.  **Path A: AI-Powered Profile Extraction**:
     - **Process**: User uploads a legacy PDF/Docx.
     - **Parsing Engine**: **pydparser** (Python Resume Parser) extracts structured professional data (Skills, Education, Experience) with high precision.
-    - **NLP Mapping**: **Flan-T5** refines the extracted entities and maps them into a **RenderCV YAML/Dictionary structure**.
+    - **NLP Mapping**: **Qwen2.5-1.5B-Instruct** refines the extracted entities and maps them into a **RenderCV YAML/Dictionary structure**.
     - **Validation**: The system validates the data against the `RenderCV` schema to ensure every required field (Contact, Education, Experience) is present.
 
 2.  **Path B: Guided Resume Builder**:
     - **Process**: A clean, accessible form captures the user's career narrative.
-    - **Optimization**: AI-assisted bullet-point enhancement (via Flan-T5) helps PWD users articulate their skills and necessary workplace accommodations in a professional tone.
+    - **Optimization**: AI-assisted bullet-point enhancement (via Qwen2.5-1.5B-Instruct) helps PWD users articulate their skills and necessary workplace accommodations in a professional tone.
 
 ### B. LaTeX Rendering Engine (RenderCV)
 Unlike standard HTML-to-PDF tools, the system leverages **LaTeX** via the `RenderCV` library:
@@ -300,7 +297,7 @@ Unlike standard HTML-to-PDF tools, the system leverages **LaTeX** via the `Rende
 ### C. Technical Architecture of the Resume Pipeline
 The system utilizes a 100% Python-based pipeline for maximum efficiency:
 
-1.  **Stage 1: Entity Extraction**: **pydparser** and **Flan-T5** work in tandem to process the user's profile and raw text, outputting a structured Python Dictionary following the `RenderCV` model.
+1.  **Stage 1: Entity Extraction**: **pydparser** and **Qwen2.5-1.5B-Instruct** work in tandem to process the user's profile and raw text, outputting a structured Python Dictionary following the `RenderCV` model.
 2.  **Stage 2: Schema Enforcement**: Data is validated using `Pydantic` (integrated into FastAPI) to ensure compatibility with LaTeX rendering requirements.
 3.  **Stage 3: Native Rendering**: The system calls `rendercv.render()` internally. This process generates a `.tex` file in memory and compiles it into a high-fidelity `.pdf`.
 4.  **Stage 4: Accommodation Integration**: A unique "Accessibility & Accommodations" section is dynamically injected into the LaTeX source, ensuring that the employer is informed of the candidate's needs in a standardized, professional format.

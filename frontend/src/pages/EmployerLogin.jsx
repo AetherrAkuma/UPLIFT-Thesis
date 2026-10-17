@@ -1,12 +1,13 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { 
     Building2, Mail, Lock, ChevronRight, AlertCircle, 
-    ShieldCheck, ArrowLeft
+    ShieldCheck, ArrowLeft, ShieldAlert
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import TurnstileWidget from '../components/TurnstileWidget';
 
 const EmployerLogin = () => {
     const navigate = useNavigate();
@@ -16,14 +17,34 @@ const EmployerLogin = () => {
     const [rememberMe, setRememberMe] = useState(false);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
+    const [failedAttempts, setFailedAttempts] = useState(() => {
+        return parseInt(sessionStorage.getItem('uplift_failed_logins_employer') || '0', 10);
+    });
+    const [requireTurnstile, setRequireTurnstile] = useState(false);
+    const [turnstileToken, setTurnstileToken] = useState('');
+    const turnstileRef = useRef(null);
+
+    const isChallengeActive = failedAttempts >= 3 || requireTurnstile;
 
     const handleLogin = async (e) => {
         e.preventDefault();
-        setLoading(true);
         setError('');
+
+        if (isChallengeActive && !turnstileToken) {
+            setError('Please complete the security verification challenge before continuing.');
+            return;
+        }
+
+        setLoading(true);
         
         try {
-            const res = await axios.post(`${API_BASE_URL}/auth/login`, { email, password, remember_me: rememberMe });
+            const payload = {
+                email,
+                password,
+                remember_me: rememberMe,
+                turnstile_token: turnstileToken || undefined
+            };
+            const res = await axios.post(`${API_BASE_URL}/auth/login`, payload);
             const { user, token } = res.data;
             
             if (user.role !== 'employer' && user.role !== 'admin') {
@@ -32,6 +53,11 @@ const EmployerLogin = () => {
                 return;
             }
             
+            sessionStorage.removeItem('uplift_failed_logins_employer');
+            setFailedAttempts(0);
+            setRequireTurnstile(false);
+            setTurnstileToken('');
+
             login(token, user, rememberMe);
             if (user.role === 'admin') {
                 navigate('/admin');
@@ -39,11 +65,27 @@ const EmployerLogin = () => {
                 navigate('/employer');
             }
         } catch (err) {
+            const nextAttempts = (err.response?.data?.failed_attempts !== undefined)
+                ? err.response.data.failed_attempts
+                : failedAttempts + 1;
+            setFailedAttempts(nextAttempts);
+            sessionStorage.setItem('uplift_failed_logins_employer', nextAttempts.toString());
+
+            if (err.response?.data?.require_turnstile || nextAttempts >= 3) {
+                setRequireTurnstile(true);
+            }
+
+            if (turnstileRef.current?.reset) {
+                turnstileRef.current.reset();
+            }
+            setTurnstileToken('');
+
             setError(err.response?.data?.detail || "Login failed. Check your credentials.");
         } finally {
             setLoading(false);
         }
     };
+
 
     return (
         <div className="min-h-screen bg-white flex flex-col font-sans overflow-hidden">
@@ -145,12 +187,31 @@ const EmployerLogin = () => {
                                 </div>
                             )}
 
+                            {isChallengeActive && (
+                                <div className="p-4 bg-amber-50/90 border border-amber-200/80 rounded-2xl space-y-2">
+                                    <div className="flex items-center gap-2 text-amber-800 text-xs font-bold">
+                                        <ShieldAlert size={16} className="text-amber-600 shrink-0" />
+                                        <span>Security verification required due to failed login attempts.</span>
+                                    </div>
+                                    <TurnstileWidget
+                                        ref={turnstileRef}
+                                        action="employer_login"
+                                        onVerify={(tok) => {
+                                            setTurnstileToken(tok);
+                                            setError('');
+                                        }}
+                                        onExpire={() => setTurnstileToken('')}
+                                    />
+                                </div>
+                            )}
+
                             <button 
-                                disabled={loading}
-                                className="w-full py-5 bg-[#0038A8] text-white rounded-[2rem] font-black text-sm uppercase tracking-widest hover:bg-blue-800 transition-all flex items-center justify-center gap-3 shadow-xl shadow-blue-100 disabled:opacity-50"
+                                disabled={loading || (isChallengeActive && !turnstileToken)}
+                                className="w-full py-5 bg-[#0038A8] text-white rounded-[2rem] font-black text-sm uppercase tracking-widest hover:bg-blue-800 transition-all flex items-center justify-center gap-3 shadow-xl shadow-blue-100 disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                                 {loading ? "Authenticating..." : "Authorize Portal"} <ChevronRight size={18} />
                             </button>
+
 
                             <p className="text-center text-xs font-bold text-slate-400">
                                 Don't have a partner account? 

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence, useScroll, useTransform } from 'framer-motion';
@@ -7,8 +7,11 @@ import { useFocusTrap } from '../hooks/useFocusTrap';
 import { 
     ShieldCheck, Sparkles, ArrowRight, ArrowLeft, User, Building, 
     Lock, Mail, Eye, EyeOff, X, CheckCircle2, Users, Briefcase, 
-    Accessibility, Globe, BarChart3, Heart, GraduationCap, Terminal, Plus, Trash2, KeyRound
+    Accessibility, Globe, BarChart3, Heart, GraduationCap, Terminal, Plus, Trash2, KeyRound,
+    ShieldAlert
 } from 'lucide-react';
+import TurnstileWidget from '../components/TurnstileWidget';
+
 
 const DISABILITY_CATEGORIES = {
     'Physical': ['Wheelchair User', 'Amputee', 'Cerebral Palsy', 'Muscular Dystrophy', 'Chronic Pain', 'Other'],
@@ -56,6 +59,16 @@ const Landing = () => {
     const [regDisabilities, setRegDisabilities] = useState([]);
     const [regEducation, setRegEducation] = useState([{ level: 'Senior High School', institution: '', degree: '', area: '', start_date: '', end_date: '' }]);
     const [regSkills, setRegSkills] = useState('');
+
+    const [failedAttempts, setFailedAttempts] = useState(() => {
+        return parseInt(sessionStorage.getItem('uplift_failed_logins_candidate') || '0', 10);
+    });
+    const [requireTurnstile, setRequireTurnstile] = useState(false);
+    const [turnstileToken, setTurnstileToken] = useState('');
+    const turnstileRef = useRef(null);
+
+    const isLoginChallengeActive = (failedAttempts >= 3 || requireTurnstile) && authMode === 'login';
+
 
     useEffect(() => {
         const params = new URLSearchParams(window.location.search);
@@ -121,6 +134,10 @@ const Landing = () => {
         setRegDisabilities([]);
         setRegEducation([{ level: 'Senior High School', institution: '', degree: '', area: '', start_date: '', end_date: '' }]);
         setRegSkills('');
+        setTurnstileToken('');
+        if (turnstileRef.current?.reset) {
+            turnstileRef.current.reset();
+        }
     };
 
     const openCandidateRegistration = () => {
@@ -136,12 +153,44 @@ const Landing = () => {
     const handleLogin = async (e) => {
         e.preventDefault();
         setError('');
+
+        if (isLoginChallengeActive && !turnstileToken) {
+            setError('Please complete the security verification challenge before logging in.');
+            return;
+        }
+
         setLoading(true);
         try {
-            const res = await axios.post(`${API_BASE_URL}/auth/login`, { email, password, remember_me: rememberMe });
+            const res = await axios.post(`${API_BASE_URL}/auth/login`, {
+                email,
+                password,
+                remember_me: rememberMe,
+                turnstile_token: turnstileToken || undefined
+            });
+
+            sessionStorage.removeItem('uplift_failed_logins_candidate');
+            setFailedAttempts(0);
+            setRequireTurnstile(false);
+            setTurnstileToken('');
+
             login(res.data.token, res.data.user, rememberMe);
             setAuthMode(null);
         } catch (err) {
+            const nextAttempts = (err.response?.data?.failed_attempts !== undefined)
+                ? err.response.data.failed_attempts
+                : failedAttempts + 1;
+            setFailedAttempts(nextAttempts);
+            sessionStorage.setItem('uplift_failed_logins_candidate', nextAttempts.toString());
+
+            if (err.response?.data?.require_turnstile || nextAttempts >= 3) {
+                setRequireTurnstile(true);
+            }
+
+            if (turnstileRef.current?.reset) {
+                turnstileRef.current.reset();
+            }
+            setTurnstileToken('');
+
             setError(err.response?.data?.detail || 'Login failed. Please check your credentials.');
         } finally {
             setLoading(false);
@@ -192,13 +241,27 @@ const Landing = () => {
         e.preventDefault();
         setError('');
         if (authMode === 'employer') {
+            if (!turnstileToken) {
+                setError('Please complete the security verification challenge.');
+                return;
+            }
             setLoading(true);
             try {
-                await axios.post(`${API_BASE_URL}/auth/register/employer`, { email, password, name });
+                await axios.post(`${API_BASE_URL}/auth/register/employer`, {
+                    email,
+                    password,
+                    name,
+                    turnstile_token: turnstileToken
+                });
                 setSuccess('Organization registered! Please log in to complete your profile.');
+                setTurnstileToken('');
                 setTimeout(() => setAuthMode('login'), 2500);
             } catch (err) {
                 setError(err.response?.data?.detail || 'Registration failed.');
+                if (turnstileRef.current?.reset) {
+                    turnstileRef.current.reset();
+                }
+                setTurnstileToken('');
             } finally {
                 setLoading(false);
             }
@@ -239,6 +302,10 @@ const Landing = () => {
                 setError('Technical skills are required.');
                 return;
             }
+            if (!turnstileToken) {
+                setError('Please complete the security verification challenge before submitting.');
+                return;
+            }
             setError('');
         }
 
@@ -249,17 +316,24 @@ const Landing = () => {
                 role: 'user',
                 disability_profile: JSON.stringify({ disabilities: regDisabilities }),
                 education: JSON.stringify(regEducation),
-                skills: regSkills
+                skills: regSkills,
+                turnstile_token: turnstileToken
             };
             await axios.post(`${API_BASE_URL}/auth/register`, payload);
             setSuccess('Account created! You can now log in.');
+            setTurnstileToken('');
             setTimeout(() => { setAuthMode('login'); }, 2500);
         } catch (err) {
             setError(err.response?.data?.detail || 'Registration failed.');
+            if (turnstileRef.current?.reset) {
+                turnstileRef.current.reset();
+            }
+            setTurnstileToken('');
         } finally {
             setLoading(false);
         }
     };
+
 
     return (
         <div className="relative bg-slate-50 min-h-screen font-sans">
@@ -903,18 +977,59 @@ const Landing = () => {
                                         </div>
                                     )}
 
+                                    {isLoginChallengeActive && (
+                                        <div className="p-4 bg-amber-50/90 border border-amber-200/80 rounded-2xl space-y-2">
+                                            <div className="flex items-center gap-2 text-amber-800 text-xs font-bold">
+                                                <ShieldAlert size={16} className="text-amber-600 shrink-0" />
+                                                <span>Security verification required due to failed login attempts.</span>
+                                            </div>
+                                            <TurnstileWidget
+                                                ref={turnstileRef}
+                                                action="login"
+                                                onVerify={(tok) => {
+                                                    setTurnstileToken(tok);
+                                                    setError('');
+                                                }}
+                                                onExpire={() => setTurnstileToken('')}
+                                            />
+                                        </div>
+                                    )}
+
+                                    {(authMode === 'employer' || (authMode === 'register' && regStep === 3)) && (
+                                        <div className="pt-2">
+                                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest text-center mb-1">
+                                                Bot Protection & Verification
+                                            </p>
+                                            <TurnstileWidget
+                                                ref={turnstileRef}
+                                                action={authMode === 'employer' ? 'employer_register' : 'candidate_quick_register'}
+                                                onVerify={(tok) => {
+                                                    setTurnstileToken(tok);
+                                                    setError('');
+                                                }}
+                                                onExpire={() => setTurnstileToken('')}
+                                            />
+                                        </div>
+                                    )}
+
                                     {error && <div className="p-4 rounded-2xl bg-rose-50 border border-rose-100 text-rose-600 text-[11px] font-black text-center uppercase tracking-wider" role="alert">{error}</div>}
                                     {success && <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-100 text-emerald-600 text-[11px] font-black text-center uppercase tracking-wider" role="status">{success}</div>}
 
                                     <button 
-                                        type="submit" disabled={loading}
-                                        className={`w-full py-5 rounded-[2rem] font-black text-sm uppercase tracking-[0.2em] shadow-xl transition-all transform active:scale-95 flex items-center justify-center gap-3 ${
+                                        type="submit" 
+                                        disabled={
+                                            loading || 
+                                            (isLoginChallengeActive && !turnstileToken) ||
+                                            ((authMode === 'employer' || (authMode === 'register' && regStep === 3)) && !turnstileToken)
+                                        }
+                                        className={`w-full py-5 rounded-[2rem] font-black text-sm uppercase tracking-[0.2em] shadow-xl transition-all transform active:scale-95 flex items-center justify-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed ${
                                             authMode === 'employer' ? 'bg-[#CE1126] text-white hover:bg-red-700' : 'bg-[#0038A8] text-white hover:bg-blue-800 shadow-blue-100'
                                         }`}
                                     >
                                         {loading ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" aria-label="Loading" /> : 
                                          authMode === 'login' ? 'Enter Platform' : authMode === 'employer' ? 'Submit Application' : 'Create Profile'}
                                     </button>
+
                                 </form>
                                 )}
                                 

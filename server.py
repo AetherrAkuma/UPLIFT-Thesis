@@ -1,8 +1,11 @@
 from fastapi import FastAPI, BackgroundTasks, HTTPException, Request, UploadFile, File
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from typing import List, Optional, Any, Dict, Union
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
+import httpx
+
 
 import psycopg2
 from psycopg2.extras import RealDictCursor
@@ -35,6 +38,9 @@ from suitability_index import compute_suitability_index
 from fairness_engine import log_match, compute_admin_fairness_report, prune_match_logs
 from ph_schools_data import PH_SCHOOLS
 from render_engine import generate_resume
+from why_matched import generate_why_matched, load_llm, find_local_model
+from job_extraction import extract_job_features, extract_posting_features
+from starlette.concurrency import run_in_threadpool
 
 # ==========================================
 # 0. SUPPRESS ALL HUGGINGFACE WARNINGS
@@ -46,8 +52,8 @@ warnings.filterwarnings("ignore")
 logging.getLogger("sentence_transformers").setLevel(logging.ERROR)
 
 # The Ultimate Silencer for "layers were not sharded"
+# (sentence-transformers stays: bi-encoder search + cross-encoder re-ranking)
 from sentence_transformers import SentenceTransformer, CrossEncoder
-from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 
 # ==========================================
 # 1. APPLICATION & AI SETUP
@@ -89,15 +95,35 @@ try:
     cross_model = CrossEncoder('cross-encoder/ms-marco-MiniLM-L-6-v2', cache_folder=CACHE_DIR, device=device)
     print("[INFO] Cross-Encoder loaded.")
 
-    # 2. Load Generative Data Analysis Engine (Flan-T5-Base)
-    # Base is 3x larger than Small, providing much better reasoning/analysis.
-    print("[INFO] Loading Generative Data Engine (Flan-T5-Base)...")
-    tokenizer = AutoTokenizer.from_pretrained("google/flan-t5-base", cache_dir=CACHE_DIR)
-    gen_model = AutoModelForSeq2SeqLM.from_pretrained("google/flan-t5-base", cache_dir=CACHE_DIR).to(device)
-    print("[INFO] Data Engine ready.")
+    # NOTE: The former Flan-T5 "Generative Data Engine" was removed.  Its two
+    # posting-time extraction jobs now run on the SAME local Qwen2.5 GGUF as
+    # the "Why matched?" verbalizer (see job_extraction.py) — one generative
+    # model for the whole project, loaded once below.
 except Exception as e:
     print(f"[ERROR] Failed to load AI Engines: {e}")
     sys.exit(1)
+
+# ==========================================
+# 1.4 GROUNDED PLAIN-LANGUAGE VERBALIZER ("Why matched?")
+# ==========================================
+# The deterministic compatibility engine is the single source of truth; the
+# small local LLM only rewrites its verified notes into simple English for
+# PWD/older readers (see why_matched.py).  Missing model file is NOT fatal:
+# the endpoint then serves the deterministic plain-language drafts.
+why_llm = None
+WHY_MATCHED_MODEL = ""
+try:
+    WHY_MATCHED_MODEL = find_local_model(os.path.join(CACHE_DIR, "gguf"))
+    WHY_MATCHED_THREADS = int(os.getenv("WHY_MATCHED_THREADS", "2"))
+    if WHY_MATCHED_MODEL:
+        print(f"[INFO] Loading Why-Matched verbalizer ({os.path.basename(WHY_MATCHED_MODEL)})...")
+        why_llm = load_llm(WHY_MATCHED_MODEL, n_ctx=2048, n_threads=WHY_MATCHED_THREADS)
+        print("[INFO] Why-Matched verbalizer ready.")
+    else:
+        print("[WARN] No GGUF verbalizer found; 'Why matched?' will use deterministic text only.")
+except Exception as e:
+    why_llm = None
+    print(f"[WARN] Why-Matched verbalizer unavailable ({e}); using deterministic text only.")
 
 # ==========================================
 # 1.5 COMPATIBILITY ENGINE
@@ -448,6 +474,21 @@ def init_db():
             created_at TIMESTAMP DEFAULT NOW()
         )
     """)
+
+    # Cache of generated "Why matched?" reports.  Generation is deterministic
+    # for a given (model, user profile, job content) fingerprint, so repeat
+    # views — and pre-warmed demo flows — are instant.
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS ai_reports (
+            user_id TEXT NOT NULL,
+            job_id TEXT NOT NULL,
+            fingerprint TEXT NOT NULL,
+            report JSONB NOT NULL,
+            meta JSONB,
+            created_at TIMESTAMP DEFAULT NOW(),
+            PRIMARY KEY (user_id, job_id, fingerprint)
+        )
+    """)
     
     # Add employer approval tracking to users
     cursor.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS approved_at TEXT")
@@ -516,7 +557,141 @@ def init_db():
 # ==========================================
 # 3. AUTHENTICATION & SECURITY
 # ==========================================
+# Cloudflare Turnstile Configuration & Failed Attempt Tracking
+CLOUDFLARE_TURNSTILE_SECRET_KEY = os.environ.get(
+    "CLOUDFLARE_TURNSTILE_SECRET_KEY",
+    "1x0000000000000000000000000000000AA"
+)
+_failed_login_attempts: Dict[str, Dict[str, Any]] = {}
+FAILED_LOGIN_WINDOW_SECONDS = 900  # 15 minutes
+MAX_UNVERIFIED_LOGIN_ATTEMPTS = 3
+
+def get_failed_attempt_record(key: str) -> Dict[str, Any]:
+    now = datetime.utcnow().timestamp()
+    record = _failed_login_attempts.get(key)
+    if record and record.get("reset_at", 0) > now:
+        return record
+    record = {"count": 0, "reset_at": now + FAILED_LOGIN_WINDOW_SECONDS}
+    _failed_login_attempts[key] = record
+    return record
+
+def record_failed_login(key: str) -> int:
+    record = get_failed_attempt_record(key)
+    record["count"] += 1
+    record["reset_at"] = datetime.utcnow().timestamp() + FAILED_LOGIN_WINDOW_SECONDS
+    return record["count"]
+
+def clear_failed_login(key: str):
+    _failed_login_attempts.pop(key, None)
+
+SITEVERIFY_URL = "https://challenges.cloudflare.com/turnstile/v0/siteverify"
+DEFAULT_TURNSTILE_HOSTNAMES = {"uplift.ragetech.dev", "localhost", "127.0.0.1"}
+# Cloudflare documents tokens as single-use, but siteverify accepted replays
+# within the token's 5-minute window during on-machine validation (2026-10-17).
+# Enforce single-use server-side: remember redeemed token digests for 10 minutes.
+TURNSTILE_REPLAY_WINDOW_SECONDS = 600
+_used_turnstile_tokens: Dict[str, float] = {}
+
+
+def _turnstile_expected_actions(expected) -> set:
+    """Normalizes 'signup,login' / ('signup', 'login') into {'signup', 'login'}."""
+    if not expected:
+        return set()
+    if isinstance(expected, str):
+        return {part.strip() for part in expected.split(",") if part.strip()}
+    return {str(part).strip() for part in expected if str(part).strip()}
+
+
+def _turnstile_hostname_allowlist() -> set:
+    raw = os.environ.get("TURNSTILE_HOSTNAMES", "").strip()
+    if raw:
+        return {host.strip().lower() for host in raw.split(",") if host.strip()}
+    return set(DEFAULT_TURNSTILE_HOSTNAMES)
+
+
+async def verify_turnstile(
+    token: Optional[str],
+    remote_ip: Optional[str] = None,
+    expected_actions=None
+) -> bool:
+    """
+    Validates a Cloudflare Turnstile token against the canonical siteverify API.
+
+    Production (real secret): requires success:true, an action from the
+    caller's expected set, and a hostname inside TURNSTILE_HOSTNAMES
+    (defaults to this deployment's known frontends: the public domain plus
+    localhost). Fails closed on any error.
+
+    Development (Cloudflare official test secret 1x000000...): every solve
+    passes by design, so action/hostname checks are skipped and network
+    hiccups never block local work.
+
+    Single-use is enforced server-side: a token successfully redeemed here
+    cannot be redeemed again for TURNSTILE_REPLAY_WINDOW_SECONDS.
+    """
+    secret = (
+        os.environ.get("TURNSTILE_SECRET") or
+        os.environ.get("CLOUDFLARE_TURNSTILE_SECRET_KEY") or
+        "1x0000000000000000000000000000000AA"
+    )
+    is_test_secret = secret.startswith("1x000000")
+
+    if not token or not isinstance(token, str):
+        return False
+
+    token = token.strip()
+    if not token or len(token) > 2048:
+        return False
+
+    token_digest = hashlib.sha256(token.encode("utf-8")).hexdigest()
+    if not is_test_secret:
+        now_ts = datetime.utcnow().timestamp()
+        for expired in [d for d, exp in _used_turnstile_tokens.items() if exp <= now_ts]:
+            del _used_turnstile_tokens[expired]
+        if token_digest in _used_turnstile_tokens:
+            print("[WARN] Turnstile token replay rejected (token was already redeemed)")
+            return False
+
+    payload = {"secret": secret, "response": token}
+    if remote_ip:
+        payload["remoteip"] = remote_ip
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.post(SITEVERIFY_URL, data=payload)
+            result = resp.json()
+    except Exception as e:
+        print(f"[WARN] Turnstile validation error: {e}")
+        # Dev/test: never block on network hiccups; production: fail closed.
+        return is_test_secret
+
+    if not result.get("success"):
+        print(f"[WARN] Turnstile validation rejected by Cloudflare: {result.get('error-codes', [])}")
+        return False
+
+    if is_test_secret:
+        return True
+
+    action = str(result.get("action") or "")
+    hostname = str(result.get("hostname") or "").strip().lower()
+
+    expected = _turnstile_expected_actions(expected_actions)
+    if expected and action not in expected:
+        print(f"[WARN] Turnstile action mismatch: expected one of {sorted(expected)}, got '{action or '<none>'}'")
+        return False
+
+    allowed = _turnstile_hostname_allowlist()
+    if allowed and hostname not in allowed:
+        print(f"[WARN] Turnstile hostname mismatch: got '{hostname or '<none>'}', allowed {sorted(allowed)}. "
+              f"Add this hostname to TURNSTILE_HOSTNAMES in .env if it is a legitimate frontend.")
+        return False
+
+    _used_turnstile_tokens[token_digest] = datetime.utcnow().timestamp() + TURNSTILE_REPLAY_WINDOW_SECONDS
+    print(f"[INFO] Turnstile verified: action='{action}', hostname='{hostname}'")
+    return True
+
 # JWT Constants
+
 SECRET_KEYS = [
     "uplift_super_secret_key_v1",                    # original key (pre-May 2026)
     "uplift-thesis-secret-key-2026-32bytes-long!!",  # intermediate key
@@ -753,11 +928,14 @@ class RegisterRequest(BaseModel):
     disability_profile: str = "{}"
     education: str = ""
     skills: str = ""
+    turnstile_token: Optional[str] = None
 
 class LoginRequest(BaseModel):
     email: str
     password: str
     remember_me: Optional[bool] = False
+    turnstile_token: Optional[str] = None
+
 
 class SearchRequest(BaseModel):
     search_query: str = ""
@@ -1026,32 +1204,23 @@ def generate_job_embedding(job_id: str, job_title: str, employer_name: str, phys
             "work_tempo": tempo
         }
         
-        # 1. AI-Powered Feature Extraction (Flan-T5) if skills or intensity are missing
+        # 1. Local-LLM feature extraction (Qwen2.5 GGUF, replaces Flan-T5)
+        #    if skills or intensity are missing.
         skills = current_job.get("structured_skills") or ""
         intensity = current_job.get("task_intensity") or "Medium"
         flexibility = current_job.get("has_flexibility", 0)
-        
+
         if not skills or skills.strip() == "":
             try:
-                prompt = (
-                    f"Context: {job_description} {physical_requirements}\n"
-                    "Question: What is the task intensity (Low, Medium, High)? Does it offer schedule flexibility (Yes, No)? List the professional skills.\n"
-                    "Answer format: Intensity: [type], Flexibility: [Yes/No], Skills: [comma separated list]"
-                )
-                inputs = tokenizer(prompt, return_tensors="pt").to(device)
-                outputs = gen_model.generate(**inputs, max_new_tokens=100)
-                extraction_text = tokenizer.decode(outputs[0], skip_special_tokens=True)
-                
-                int_match = re.search(r'Intensity:\s*(\w+)', extraction_text)
-                if int_match: intensity = int_match.group(1).strip()
-                
-                flex_match = re.search(r'Flexibility:\s*(\w+)', extraction_text)
-                if flex_match and flex_match.group(1).lower() == 'yes': flexibility = 1
-                
-                skill_match = re.search(r'Skills:\s*(.*)', extraction_text)
-                if skill_match and not skills: skills = skill_match.group(1).strip()
+                features = extract_job_features(why_llm, job_description, physical_requirements)
+                if features["intensity"]:
+                    intensity = features["intensity"]
+                if features["flexibility"]:
+                    flexibility = 1
+                if features["skills"] and not skills:
+                    skills = features["skills"]
             except Exception as parse_err:
-                print(f"[WARN] Flan-T5 extraction notice for job {job_id}: {parse_err}")
+                print(f"[WARN] Feature extraction notice for job {job_id}: {parse_err}")
                 
         current_job["structured_skills"] = skills
         current_job["task_intensity"] = intensity
@@ -1078,7 +1247,14 @@ def generate_job_embedding(job_id: str, job_title: str, employer_name: str, phys
 # ==========================================
 
 @app.post("/api/auth/register")
-async def register(req: RegisterRequest):
+async def register(req: RegisterRequest, request: Request):
+    client_ip = request.client.host if request.client else "127.0.0.1"
+    if not await verify_turnstile(req.turnstile_token, client_ip, ("candidate_register", "candidate_quick_register")):
+        raise HTTPException(
+            status_code=400,
+            detail="Security verification required. Please complete the captcha challenge."
+        )
+
     conn = get_db_connection()
     cursor = conn.cursor(cursor_factory=RealDictCursor)
     cursor.execute("SELECT id FROM users WHERE email = %s", (req.email,))
@@ -1139,7 +1315,14 @@ async def register(req: RegisterRequest):
     return {"message": "Registration successful"}
 
 @app.post("/api/auth/register/employer")
-async def register_employer(req: RegisterRequest):
+async def register_employer(req: RegisterRequest, request: Request):
+    client_ip = request.client.host if request.client else "127.0.0.1"
+    if not await verify_turnstile(req.turnstile_token, client_ip, ("employer_register",)):
+        raise HTTPException(
+            status_code=400,
+            detail="Security verification required. Please complete the captcha challenge."
+        )
+
     conn = get_db_connection()
     cursor = conn.cursor(cursor_factory=RealDictCursor)
     cursor.execute("SELECT id FROM users WHERE email = %s", (req.email,))
@@ -1167,7 +1350,24 @@ async def register_employer(req: RegisterRequest):
     return {"message": "Application submitted. Awaiting admin approval."}
 
 @app.post("/api/auth/login")
-async def login(req: LoginRequest):
+async def login(req: LoginRequest, request: Request):
+    client_ip = request.client.host if request.client else "127.0.0.1"
+    normalized_email = (req.email or "").strip().lower()
+    attempt_key = f"{client_ip}:{normalized_email}"
+    attempt_record = get_failed_attempt_record(attempt_key)
+    is_challenge_required = attempt_record["count"] >= MAX_UNVERIFIED_LOGIN_ATTEMPTS
+
+    if is_challenge_required:
+        if not await verify_turnstile(req.turnstile_token, client_ip, ("login", "employer_login")):
+            return JSONResponse(
+                status_code=403,
+                content={
+                    "detail": "Security verification required due to multiple failed login attempts. Please complete the captcha.",
+                    "require_turnstile": True,
+                    "failed_attempts": attempt_record["count"]
+                }
+            )
+
     conn = get_db_connection()
     try:
         cursor = conn.cursor(cursor_factory=RealDictCursor)
@@ -1183,7 +1383,18 @@ async def login(req: LoginRequest):
         user = cursor.fetchone()
         
         if not user or user['password_hash'] != hash_password(req.password):
-            raise HTTPException(status_code=401, detail="Invalid credentials")
+            failed_count = record_failed_login(attempt_key)
+            return JSONResponse(
+                status_code=401,
+                content={
+                    "detail": "Invalid credentials",
+                    "require_turnstile": failed_count >= MAX_UNVERIFIED_LOGIN_ATTEMPTS,
+                    "failed_attempts": failed_count
+                }
+            )
+            
+        clear_failed_login(attempt_key)
+
             
         token = create_access_token({
             "sub": user['id'],
@@ -1430,26 +1641,20 @@ async def ai_analyze_job_description(req: JobAnalysisRequest, user: dict = Depen
         has_comm = bool(re.search(r'\b(slack|email|chat|text|written|phone|call|calls|verbal|spoken|meeting|meetings|ticket|tickets)\b', combined_text))
         has_setting = bool(re.search(r'\b(remote|home|office|indoor|hybrid|onsite|on-site|flexible|shift|schedule|environment)\b', combined_text))
         
-        # 2. Flan-T5 Feature & Skill Extraction
-        prompt = (
-            f"Context: Job title: {title}. Description: {desc}.\n"
-            "Question: 1. Extract 3 to 6 key professional skills. 2. What is the physical posture (Mostly Seated, Mixed Standing, Physical Handling)? 3. What is the communication mode (Text-First, Phone/Spoken, Mixed)? 4. What is the work pace (Self-Paced, Standard, Fast-Paced)?\n"
-            "Answer format: Skills: [comma separated skills] | Posture: [posture] | Communication: [mode] | Pace: [pace]"
-        )
-        inputs = tokenizer(prompt, return_tensors="pt").to(device)
-        outputs = gen_model.generate(**inputs, max_new_tokens=120)
-        res_text = tokenizer.decode(outputs[0], skip_special_tokens=True)
-        
-        skills_match = re.search(r'Skills:\s*([^|]+)', res_text)
-        posture_match = re.search(r'Posture:\s*([^|]+)', res_text)
-        comm_match = re.search(r'Communication:\s*([^|]+)', res_text)
-        pace_match = re.search(r'Pace:\s*([^|]+)', res_text)
-        
-        extracted_skills = [s.strip() for s in skills_match.group(1).split(",") if s.strip()] if skills_match else []
-        extracted_posture = posture_match.group(1).strip() if posture_match else "Mostly Seated"
-        extracted_comm = comm_match.group(1).strip() if comm_match else "Mixed"
-        extracted_pace = pace_match.group(1).strip() if pace_match else "Standard"
-        
+        # 2. Local-LLM feature & skill extraction (Qwen2.5 GGUF, replaces
+        #    Flan-T5).  Runs in the threadpool so the event loop is never
+        #    blocked; if the model is unavailable the deterministic clue
+        #    detection above still drives the clarity score.
+        try:
+            extracted = await run_in_threadpool(extract_posting_features, why_llm, title, desc)
+            extracted_skills = extracted["skills"]
+            extracted_posture = extracted["posture"]
+            extracted_comm = extracted["communication"]
+            extracted_pace = extracted["pace"]
+        except Exception as llm_err:
+            print(f"[WARN] Posting extraction unavailable: {llm_err}")
+            extracted_skills, extracted_posture, extracted_comm, extracted_pace = [], "Mostly Seated", "Mixed", "Standard"
+
         has_skills = len(extracted_skills) >= 2 or len(desc.split()) > 40
         
         # 3. Transparent Clarity Score Breakdown (Pillar-based)
@@ -1654,110 +1859,96 @@ async def update_pwd_profile(req: ProfileUpdate, user: dict = Depends(RoleChecke
         
     return {"message": "Profile updated successfully.", "user": updated_user}
 
-def generate_ai_report(metrics, user_ctx, job_ctx, facts, ontology_reasons=None):
-    """Generates a high-stability analytical report using Context-Question-Answer (CQA) prompting.
-    `facts` are factual, capability-derived strings (no static category stereotypes)."""
+# ==========================================
+# "Why matched?" report cache (DB-backed)
+# ==========================================
+_FINGERPRINT_SKIP_USER = {
+    "id", "email", "password_hash", "role", "status", "created_at",
+    "employer_proof", "approved_at", "approved_by", "rejection_reason",
+}
+_FINGERPRINT_SKIP_JOB = {"employer_id", "status_reason"}
+
+
+def compute_report_fingerprint(user_profile, job):
+    """Deterministic cache key: same engine + model + profile + job => same report."""
+    model_name = os.path.basename(WHY_MATCHED_MODEL) if WHY_MATCHED_MODEL else "no-model"
+    user_view = {k: v for k, v in dict(user_profile).items() if k not in _FINGERPRINT_SKIP_USER}
+    job_view = {k: v for k, v in dict(job).items() if k not in _FINGERPRINT_SKIP_JOB}
+    payload = json.dumps(
+        {"engine": "why_matched_v3", "model": model_name, "user": user_view, "job": job_view},
+        sort_keys=True, default=str,
+    )
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:24]
+
+
+def load_cached_report(user_id, job_id, fingerprint):
     try:
-        job_title = job_ctx.split(" at ")[0] if " at " in job_ctx else job_ctx
-        
-        # Unpack metrics for explainability grounding
-        safety = metrics.get("safety", 100.0)
-        skills = metrics.get("skills", 100.0)
-        stamina = metrics.get("stamina", 100.0)
-        ontology = metrics.get("ontology", 100.0)
-        
-        score_context = (
-            f"Matching metrics: safety alignment = {safety:.1f}%, "
-            f"technical skill relevance = {skills:.1f}%, "
-            f"sustainability and stamina = {stamina:.1f}%, "
-            f"workplace suitability compatibility score = {ontology:.1f}%."
+        conn = get_db_connection()
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        cursor.execute(
+            "SELECT report FROM ai_reports WHERE user_id = %s AND job_id = %s AND fingerprint = %s",
+            (user_id, job_id, fingerprint),
         )
-
-        def run_stable_model(question, context, max_new=250):
-            # CQA Prompting: Ground the model with specific metrics context to ensure explainability
-            prompt = (
-                f"Context: You are an expert vocational analyst. {score_context} {context} Candidate background: {user_ctx}. Target role: {job_title}.\n"
-                f"Question: {question}\n"
-                f"Answer:"
-            )
-            inputs = tokenizer(prompt, return_tensors="pt").to(device)
-            outputs = gen_model.generate(
-                **inputs, 
-                max_new_tokens=max_new, 
-                temperature=0.1,
-                do_sample=False,
-                repetition_penalty=1.2,
-                no_repeat_ngram_size=3,
-                early_stopping=True
-            )
-            res = tokenizer.decode(outputs[0], skip_special_tokens=True).strip()
-            return res.replace("Answer:", "").replace("Answer", "").strip()
-
-        # 1. Compatibility (grounded in suitability summary and safety score)
-        safety_q = (
-            f"Based on the safety score of {safety:.1f}%, summarize how the workplace setup and accommodations support safe, accessible performance."
-            if safety >= 70.0 else
-            f"With a safety score of {safety:.1f}%, describe key ergonomic adjustments or accommodations recommended to address physical demands."
-        )
-        compatibility_raw = run_stable_model(
-            safety_q,
-            facts.get("analysis", "Workplace suitability overview.")
-        )
-        compatibility_clean = compatibility_raw.strip()
-        if len(compatibility_clean) > 40 and "Person with" not in compatibility_clean:
-            compatibility_final = compatibility_clean
-        else:
-            compatibility_final = facts.get("analysis", f"Based on a safety score of {safety:.1f}% and workplace suitability of {ontology:.1f}%, the {job_title} role aligns safely with the candidate's accessibility profile.")
-        
-        # 2. Performance (grounded in skill score and pros summary)
-        performance_raw = run_stable_model(
-            f"Considering the technical skill relevance score of {skills:.1f}%, describe the user's expected workplace performance.",
-            facts.get("performance", "Productivity and capability alignment.")
-        )
-        performance_clean = performance_raw.strip()
-        if len(performance_clean) > 40 and "Person with" not in performance_clean:
-            performance_final = performance_clean
-        else:
-            performance_final = facts.get("performance", f"With a technical skill relevance score of {skills:.1f}%, the candidate possesses strong foundation to carry out core duties effectively.")
-        
-        # 3. Advice (grounded in ontology compatibility and accommodations)
-        advice_raw = run_stable_model(
-            f"Given the workplace suitability score of {ontology:.1f}%, what ergonomic or workflow recommendations will optimize success?",
-            facts.get("advice", "Workplace accommodation guidance.")
-        )
-        advice_clean = advice_raw.strip()
-        if len(advice_clean) > 40 and "Person with" not in advice_clean:
-            advice_final = advice_clean
-        else:
-            advice_final = facts.get("advice", "Standard ergonomic review and adjustable workstation arrangements are recommended.")
-        
-        # 4. Challenges (Cons - grounded in stamina and potential barriers)
-        challenges_raw = run_stable_model(
-            f"Referencing the stamina score of {stamina:.1f}%, summarize any operational considerations to prevent fatigue.",
-            facts.get("hinder", "No significant barriers detected.")
-        )
-        challenges_clean = challenges_raw.strip()
-        if len(challenges_clean) > 40 and "Person with" not in challenges_clean:
-            challenges_final = challenges_clean
-        else:
-            challenges_final = facts.get("hinder", f"Maintaining regular rest intervals and predictable task distribution will support sustained comfort.")
-
-        return {
-            "compatibility": compatibility_final,
-            "performance": performance_final,
-            "advice": advice_final,
-            "challenges": challenges_final,
-            "barriers": facts.get("barriers", [])
-        }
+        row = cursor.fetchone()
+        conn.close()
+        if row and row.get("report"):
+            report = row["report"]
+            return dict(report) if isinstance(report, dict) else json.loads(report)
     except Exception as e:
-        print(f"[ERROR] CQA Generation failed: {e}")
-        return {
-            "compatibility": facts.get("analysis", "Workplace suitability overview."),
-            "performance": facts.get("performance", "Productivity and capability alignment."),
-            "advice": facts.get("advice", "Standard ergonomic review recommended."),
-            "challenges": facts.get("hinder", "No significant barriers detected."),
-            "barriers": facts.get("barriers", [])
-        }
+        print(f"[WARN] ai_reports read failed: {e}")
+    return None
+
+
+def store_cached_report(user_id, job_id, fingerprint, report, meta):
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT INTO ai_reports (user_id, job_id, fingerprint, report, meta) "
+            "VALUES (%s, %s, %s, %s::jsonb, %s::jsonb) "
+            "ON CONFLICT (user_id, job_id, fingerprint) DO UPDATE "
+            "SET report = EXCLUDED.report, meta = EXCLUDED.meta, created_at = NOW()",
+            (
+                user_id, job_id, fingerprint,
+                json.dumps(report, default=str),
+                json.dumps({k: v for k, v in meta.items() if k != "details"}, default=str),
+            ),
+        )
+        conn.commit()
+        conn.close()
+        return True
+    except Exception as e:
+        print(f"[WARN] ai_reports write failed: {e}")
+        return False
+
+
+def generate_ai_report(metrics, name, job_title, employer, facts,
+                       explanations=None, overlap_skills=None, accommodations=None):
+    """Grounded "Why matched?" report: deterministic plain drafts + optional LLM.
+
+    Architecture (auditable for the thesis):
+      1. compatibility_engine.py computes the verified facts (source of truth).
+      2. why_matched.compose_plain_drafts() builds accurate, very simple card
+         text from the engine's verified verdicts — no model involved.
+      3. If a local GGUF LLM is available it may SOFTEN each draft into warmer
+         phrasing; a deterministic guard validates every rewrite (numbers AND
+         evaluative claim words must exist in the source note, no copied or
+         degenerate text) and any failing section falls back to the
+         deterministic draft.
+    This function never raises: worst case it returns the deterministic report.
+    """
+    report, meta = generate_why_matched(
+        why_llm, name or "User", job_title, employer or "the employer", metrics, facts,
+        explanations=explanations, overlap_skills=overlap_skills, accommodations=accommodations,
+    )
+    if meta.get("model") not in (None, "none"):
+        model_name = os.path.basename(str(meta.get("model", "")))
+        detail = meta.get("details") if meta.get("fallbacks") else ""
+        print(
+            f"[INFO] Why-matched verbalizer: {model_name} | {meta.get('seconds', 0)}s "
+            f"| {meta.get('tokens', 0)} tokens | fallbacks={meta.get('fallbacks', '?')} {detail}"
+        )
+    return report, meta
 
 @app.delete("/api/admin/delete-job/{job_id}")
 async def admin_delete_job(job_id: str, user: dict = Depends(RoleChecker(['admin']))):
@@ -2067,7 +2258,9 @@ async def pwd_suitability_match(req: SearchRequest, user: dict = Depends(RoleChe
     }
 
 @app.get("/api/pwd/job-analysis/{job_id}")
-async def get_job_analysis(job_id: str, user: dict = Depends(RoleChecker(['user']))):
+def get_job_analysis(job_id: str, user: dict = Depends(RoleChecker(['user']))):
+    # NOTE: intentionally synchronous so FastAPI runs it in a worker thread ?
+    # heavy compatibility + LLM work must never block the event loop.
     conn = get_db_connection()
     cursor = conn.cursor(cursor_factory=RealDictCursor)
     
@@ -2154,22 +2347,29 @@ async def get_job_analysis(job_id: str, user: dict = Depends(RoleChecker(['user'
     # 6. Physical Safety Score (Unified Deterministic Ergonomics & Multi-Category Accommodations)
     safety_score = compute_physical_safety_score(job, user_profile, capabilities=capabilities, compat=compat)
     
-    # Ground the context using the formal compatibility findings to prioritize explainability
-    user_context = (
-        f"Background: {user_profile.get('skills', 'No skills listed')}. "
-        f"Experience: {format_experience(user_profile.get('experience')) or 'N/A'}. "
-        f"Education: {format_education(user_profile.get('education')) or 'N/A'}. "
-        f"Capability-Based Compatibility Findings: {'; '.join(ontology_reasons)}"
-    )
-    job_context = f"{job['job_title']} at {job['employer_name']}. Requires: {job['physical_requirements']}"
-    
-    # Pass the actual calculated metrics including the compatibility score and reasons
-    report = generate_ai_report({
-        "safety": safety_score, 
-        "skills": skill_score, 
-        "stamina": stamina_score, 
-        "ontology": ontology_score
-    }, user_context, job_context, compat["facts"], ontology_reasons=ontology_reasons)
+    # Grounded "Why matched?" report: served from the DB cache when possible,
+    # otherwise generated once (deterministic facts + guarded plain-language
+    # rewrite) and stored so repeat views and pre-warmed demos are instant.
+    fingerprint = compute_report_fingerprint(user_profile, job)
+    report = load_cached_report(user['id'], job['id'], fingerprint)
+    if report is not None:
+        print("[INFO] Why-matched served from DB cache.")
+    else:
+        report, meta = generate_ai_report({
+            "safety": safety_score,
+            "skills": skill_score,
+            "stamina": stamina_score,
+            "ontology": ontology_score
+        }, user_profile.get('name'), job['job_title'], job['employer_name'], compat["facts"],
+            explanations=compat.get("explanations"),
+            overlap_skills=overlap,
+            accommodations=compat.get("accommodations"))
+        # Cache whenever the LLM actually ran (even if every section fell back
+        # to the deterministic drafts): repeat views must never pay the
+        # generation cost again.  Skip only when no model ran or it errored
+        # (so a fixed model/guard setup gets a fresh attempt later).
+        if meta.get("model") not in (None, "none", "error"):
+            store_cached_report(user['id'], job['id'], fingerprint, report, meta)
     
     return {
         "analysis": report,

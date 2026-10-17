@@ -43,7 +43,7 @@ The UPLIFT platform is structured around a multi-tier **Input-Process-Output (IP
 +----------------------------------------------------------------------------------------------------+
 | PROCESSES                                                                                          |
 | 1. Two-Phase Ingestion & Feature Extraction:                                                        |
-|    - Background Flan-T5 zero-shot extraction: task intensity, schedule flexibility, skills.        |
+|    - Background Qwen2.5 local-LLM extraction: task intensity, schedule flexibility, skills.        |
 |    - Bi-Encoder (all-MiniLM-L12-v2) semantic envelope synthesis -> 384-dim dense vector.           |
 | 2. Stage 1: Vector Retrieval (PostgreSQL + pgvector HNSW):                                         |
 |    - Real-time iterative graph search: ORDER BY embedding <=> query_vector ASC LIMIT 30.          |
@@ -59,7 +59,7 @@ The UPLIFT platform is structured around a multi-tier **Input-Process-Output (IP
 |    - Composite Suitability Formula: Weighted synthesis -> Final Accessibility Percentage Ψ(C, J).  |
 | 5. Stage 4: Generative Synthesis & Explainability:                                                 |
 |    - Structured explainability audit: Strengths/Headroom, Manageable Stretches, Accommodations.   |
-|    - Optional Flan-T5 contextual narrative generation.                                             |
+|    - Grounded Qwen2.5-1.5B narrative generation (validated metric-aware rewrites).                 |
 | 6. Branding & Document Generation:                                                                 |
 |    - pydparser resume extraction + RenderCV (Typst/LaTeX) automated PDF resume generation.         |
 +----------------------------------------------------------------------------------------------------+
@@ -122,7 +122,7 @@ graph TB
     subgraph Neural_AI_Cluster
         BE["Bi-Encoder: all-MiniLM-L12-v2"]
         CE["Cross-Encoder: ms-marco-MiniLM-L-6-v2"]
-        GEN["Generative LLM: google/flan-t5-base"]
+        GEN["Generative LLM: Qwen2.5-1.5B (GGUF)"]
     end
 
     CP --> ROUTER
@@ -164,7 +164,7 @@ graph TB
 | **Vector Engine** | `pgvector` v0.8.2 | PostgreSQL Tables (`jobs`) | C-Engine Extension | In-database HNSW vector indexing; evaluates cosine distance (`<=>`) in sub-6ms. |
 | **Bi-Encoder** | `sentence-transformers` (all-MiniLM-L12-v2) | PyTorch / Local Weights | In-Memory Model Cache | Vectorizes 384-dim qualification and job semantic envelopes into dense vector hyperspace. |
 | **Cross-Encoder** | `CrossEncoder` (ms-marco-MiniLM-L-6-v2) | PyTorch Runtime | Direct Tensor Inference | Performs deep pairwise cross-attention for high-precision vocational relevance ranking. |
-| **Generative LLM** | HuggingFace Transformers (flan-t5-base) | PyTorch / GPU or CPU | Seq2Seq Pipeline | Zero-shot feature extraction from unstructured job text and personalized narrative synthesis. |
+| **Generative LLM** | llama-cpp-python (Qwen2.5-1.5B-Instruct, Q4_K_M GGUF) | llama.cpp Runtime / CPU or GPU | Local Chat Pipeline (temperature 0) | Grounded feature extraction from unstructured job text and guarded narrative synthesis for the "Why matched?" cards. |
 | **Resume Compiler** | RenderCV v2.8 + Typst | Local Executable / Subprocess | YAML to CLI to PDF | Compiles structured JSON profiles into publication-grade, ATS-compliant LaTeX PDF resumes. |
 | **Fairness Toolkit**| IBM AIF360 v0.6.1 | PostgreSQL `match_logs` | Production Audit API | Evaluates demographic parity, disparate impact, and statistical disparity across 11 NCDA disability groups. Fed by real-time log_match() calls in suitability-match pipeline. |
 
@@ -538,7 +538,7 @@ flowchart TD
 
     subgraph Stage_4_Explainability_and_Reasoning
         AUDIT["Structured 3-Part Verbal Explainability Audit"]
-        LLM["Generative LLM: Flan-T5-Base (CQA Synthesis)"]
+        LLM["Generative LLM: Qwen2.5-1.5B-Instruct (GGUF)"]
     end
 
     subgraph Stage_5_Fairness_Auditing
@@ -590,7 +590,7 @@ Evaluates the 4 independent criteria pillars:
 
 ### Stage 4: Generative Reasoning & Explainability Audit
 *   **Deterministic Audit Breakdown**: Identifies exact **Strengths** ($\text{Gap} \le 0$), **Manageable Stretches** ($\text{Gap} = 1$), and **Actionable Accommodations** ($\text{Gap} \ge 2$).
-*   **Flan-T5 Synthesis**: Generates narrative suitability reports (Compatibility, Performance, Advice, Challenges) grounded strictly in computed metrics.
+*   **Qwen2.5 Synthesis**: Rewrites the deterministic "Why matched?" drafts (Compatibility, Performance, Advice) into warmer plain English. Every rewrite is validated against the computed metrics before display, and the grounded drafts are used verbatim whenever validation fails.
 
 ### Stage 5: Real-Time Fairness Auditing (AIF360 Production Pipeline)
 *   **Match Logging**: After top-10 results are returned, each match is logged to `match_logs` via `log_match()`, recording the user's disability category (mapped to 11 NCDA types), composite score, and component scores (safety, skill, stamina).

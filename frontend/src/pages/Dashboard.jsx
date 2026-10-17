@@ -594,6 +594,11 @@ const AIAnalysisSidebar = ({ job, data, loading, onClose, fairness }) => {
                                 </p>
                             </div>
                         </motion.div>
+
+                        <p className="text-center text-[10px] font-bold uppercase tracking-widest text-slate-400">
+                            Plain-language summary of your verified match data — every number is
+                            checked against the results above; no new facts are added.
+                        </p>
                     </motion.div>
                 )}
             </div>
@@ -799,6 +804,10 @@ const MatchCard = ({ match, isOpen, onToggle, onAnalyze, fairness, showAiMatch }
 
 // --- MAIN DASHBOARD ---
 
+// Session-scoped cache: "Why matched?" reports are deterministic per job,
+// so a repeat click must render instantly (panelists never wait twice).
+const analysisCache = new Map();
+
 const Dashboard = () => {
     const { user, token, API_BASE_URL } = useAuth();
     const navigate = useNavigate();
@@ -885,12 +894,21 @@ const Dashboard = () => {
 
     const handleAnalyzeJob = async (job) => {
         setAnalysisJob(job);
+        const cacheKey = job.job_id;
+        // Instant repeat views: the grounded report for a job is deterministic
+        // for this session, so reopening it must never make the user wait again.
+        if (analysisCache.has(cacheKey)) {
+            setAnalysisData(analysisCache.get(cacheKey));
+            setLoadingAnalysis(false);
+            return;
+        }
         setLoadingAnalysis(true);
         setAnalysisData(null);
         try {
             const res = await axios.get(`${API_BASE_URL}/pwd/job-analysis/${job.job_id}`, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
+            analysisCache.set(cacheKey, res.data);
             setAnalysisData(res.data);
         } catch (err) {
             console.error("Analysis failed", err);

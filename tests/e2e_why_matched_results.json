@@ -1,0 +1,32 @@
+{
+  "user": "Test (63f9d454-0d8b-45e5-9b1f-85fa4f2cf347)",
+  "job": "Maid at John Rey",
+  "first_call_cold_seconds": 31.38,
+  "second_call_warm_seconds": 0.07,
+  "third_call_warm_seconds": 0.08,
+  "analysis": {
+    "compatibility": "You're 40% suitable for the job due to workplace suitability, but physical safety alignment is only 30%. This role requires more physical mobility and exertion than you feel comfortable with. You'll need employer support to do it safely. Your fine-motor coordination, manual dexterity, cognitive, and analytical skills work well here already.",
+    "performance": "Your skills already fit part of this job: cleaning. These parts are easy for you: fine-motor coordination and manual dexterity and cognitive and analytical tasks. The physical mobility and exertion parts may be hard, so plan rest and support for those days.",
+    "advice": "You have 75% stamina. Ask for wheelchair-accessible office, level floor access, accessible parking, and an adjustable-height desk. These will make your work easier and safer.",
+    "challenges": "Elevated demand in Physical Mobility And Exertion requires proactive adjustments. Bridged effectively via: Wheelchair-accessible office, Level floor access.",
+    "barriers": [
+      "⚠️ Physical Mobility And Exertion: Elevated demand (high) — requires employer support.",
+      "⚡ Work Pace And Operational Tempo: Moderate demand (moderate) — manageable with minor adjustments.",
+      "⚡ Concurrent Task Intensity: Moderate demand (medium) — manageable with minor adjustments."
+    ],
+    "generated_by": "hybrid"
+  },
+  "stored_meta": {
+    "model": "./model_cache\\gguf\\Qwen2.5-1.5B-Instruct-GGUF\\Qwen2.5-1.5B-Instruct-Q4_K_M.gguf",
+    "tokens": 149,
+    "seconds": 31.22,
+    "timings": {
+      "advice": 5.96,
+      "performance": 9.47,
+      "compatibility": 15.79
+    },
+    "fallbacks": 1,
+    "tok_per_s": 4.8
+  },
+  "fingerprint": "7da0ebd1caa4581db318760b"
+}

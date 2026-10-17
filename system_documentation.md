@@ -20,7 +20,7 @@ The system is built on a modern, high-performance stack optimized for AI inferen
 | **Backend** | FastAPI (Python) | High-performance asynchronous API orchestration. |
 | **Database & Vector Engine** | PostgreSQL + pgvector | Relational data storage, vector similarity search, and ACID compliance. |
 | **AI Models** | Sentence-Transformers | Bi-Encoders (`all-MiniLM-L12-v2`) and Cross-Encoders (`ms-marco-MiniLM-L-6-v2`). |
-| **LLM Engine** | Flan-T5-Base | Generative reasoning for suitability analysis and feature extraction. |
+| **LLM Engine** | Qwen2.5-1.5B-Instruct (GGUF) | Grounded narrative synthesis and job-description feature extraction. |
 | **OCR Engine** | PaddleOCR-VL | Layout-aware vision-language OCR for ID verification. |
 | **Parsing Engine** | pydparser | Structured data extraction from uploaded resumes. |
 | **Doc Generation** | RenderCV | LaTeX-powered professional PDF resume generation. |
@@ -79,7 +79,7 @@ graph TD
         direction TB
         M1["Bi-Encoder: all-MiniLM-L12-v2"]
         M2["Cross-Encoder: ms-marco-MiniLM"]
-        M3["Gen-AI: Flan-T5-Base"]
+        M3["Gen-AI: Qwen2.5-1.5B-Instruct"]
     end
 
     Matcher --> M1
@@ -104,9 +104,9 @@ end
 ### AI Engine Cluster Detail:
 *   **Bi-Encoder (`all-MiniLM-L12-v2`)**: Converts complex text into 384-dimensional vectors. This allows for "Semantic Search," finding jobs based on intent and meaning rather than just keywords.
 *   **Cross-Encoder (`ms-marco-MiniLM-L-6-v2`)**: Performs a side-by-side comparison of the User Profile and Job. It is the core of the "Safety Check," identifying subtle environmental barriers (e.g., a "desk job" that actually requires frequent stair climbing).
-*   **Flan-T5-Base**: 
+*   **Qwen2.5-1.5B-Instruct (GGUF)**: 
     *   **Extraction**: Automatically extracts Task Intensity and Skills from raw job posts.
-    *   **Reasoning**: Generates the "Suitability Report" explaining the match in plain English.
+    *   **Reasoning**: Generates the grounded "Suitability Report" (deterministic drafts + metric-validated plain-English rewrites).
 
 ### Security Implementation:
 *   **RBAC**: Roles defined as `user` (PWD), `employer`, and `admin`.
@@ -148,19 +148,19 @@ When an employer posts a job, it undergoes a **Multi-Model Ingestion Pipeline**:
     *   **Goal**: Create a mathematical "fingerprint" of the job for fast similarity matching.
 
 2.  **Stage 2: Generative Feature Extraction**:
-    *   **Model Architecture**: `Flan-T5-Base` (Google) - A Sequence-to-Sequence (Seq2Seq) Transformer.
+    *   **Model Architecture**: `Qwen2.5-1.5B-Instruct` (Q4_K_M GGUF via `llama-cpp-python`) - A decoder-only instruct LLM; the single generative model of the system.
     *   **The Ingestion Prompt**: 
         ```text
         Context: {job_description} {physical_requirements}
         Question: What is the task intensity (Low, Medium, High)? 
                   Does it offer schedule flexibility (Yes, No)? 
                   List the professional skills.
-        Answer format: Intensity: [type], Flexibility: [Yes/No], Skills: [list]
+        Answer format: Intensity: [Low|Medium|High], Flexibility: [Yes|No], Skills: [comma separated list]
         ```
-    *   **Parsing Logic (Regex)**: The natural language output is stripped and parsed using:
-        *   `r'Intensity:\s*(\w+)'` -> Extracts Intensity level.
-        *   `r'Flexibility:\s*(\w+)'` -> Maps "Yes" to `1` and "No" to `0`.
-        *   `r'Skills:\s*(.*)'` -> Captures the raw skill string.
+    *   **Parsing Logic (Label Splitter)**: The one-line output is split into labeled values with safe defaults:
+        *   `Intensity` -> normalized to Low / Medium / High.
+        *   `Flexibility` -> maps "Yes" to `1` and "No" to `0`.
+        *   `Skills` -> captures the comma-separated skill string.
 
 3.  **Stage 3: High-Dimensional Vectorization**:
     *   **Model**: `all-MiniLM-L12-v2`.
@@ -174,7 +174,7 @@ When an employer posts a job, it undergoes a **Multi-Model Ingestion Pipeline**:
     *   **Semantic Score** (Overall fit).
     *   **Safety Fit** (Disability-specific alignment).
     *   **Skill Match** (Experience vs. Requirements).
-4.  **Generative Analysis**: Flan-T5 synthesizes these data points into a plain-English report explaining *why* the job fits the candidate's unique profile.
+4.  **Generative Analysis**: Qwen2.5-1.5B-Instruct rewrites the deterministic, metric-grounded drafts into a warmer plain-English report explaining *why* the job fits the candidate's unique profile; the grounded drafts appear verbatim whenever a rewrite fails validation.
 
 ---
 
@@ -189,7 +189,7 @@ To automate the verification of PWD IDs, the system integrates **PaddleOCR-VL**.
 ### B. Standardized Resume Engine (pydparser & RenderCV)
 Ensures PWD candidates are presented with professional-grade vocational branding.
 1.  **Extraction**: **pydparser** extracts structured data from existing resumes.
-2.  **Refinement**: **Flan-T5** optimizes descriptions and suggests workplace accommodations.
+2.  **Refinement**: **Qwen2.5-1.5B-Instruct** optimizes descriptions and suggests workplace accommodations.
 3.  **Generation**: **RenderCV** typesets the final resume in **LaTeX**, providing a premium, standardized PDF output.
 
 ---

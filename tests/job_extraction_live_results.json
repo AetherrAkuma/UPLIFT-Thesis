@@ -1,0 +1,38 @@
+{
+  "when": "2026-10-17T12:09:39",
+  "model": "Qwen2.5-1.5B-Instruct-Q4_K_M.gguf",
+  "threads": 2,
+  "jobs": [
+    {
+      "job": "Maid",
+      "seconds": 4.0,
+      "intensity": "Medium",
+      "flexibility": 0,
+      "skills": "Cleaning, Active standing, Walking, Bending",
+      "sane": true
+    },
+    {
+      "job": "Computer Encoder",
+      "seconds": 6.4,
+      "intensity": "Medium",
+      "flexibility": 0,
+      "skills": "Seated data transcription, verification, data accuracy, data integrity, organization, documentation, databases, systems, spreadsheets, keyboard/mouse, speech-to-text",
+      "sane": true
+    }
+  ],
+  "raw_feature_reply": "Intensity: Medium, Flexibility: No, Skills: Active standing, walking, bending, light cleaning tasks.",
+  "raw_feature_parse_matches": false,
+  "posting": {
+    "seconds": 6.5,
+    "skills": [
+      "Cleaning",
+      "Organization",
+      "Communication"
+    ],
+    "posture": "Mostly Seated",
+    "communication": "Phone/Spoken",
+    "pace": "Standard",
+    "sane": true
+  },
+  "raw_posting_reply": "Skills: Cleaning, Organization, Problem Solving | Posture: Mostly Seated | Communication: Mixed | Pace: Standard"
+}

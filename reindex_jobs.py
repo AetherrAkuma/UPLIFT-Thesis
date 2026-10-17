@@ -8,7 +8,6 @@ Run from the project root:
 import argparse
 import json
 import os
-import re
 import sys
 import warnings
 import logging
@@ -30,6 +29,9 @@ try:
 except ImportError:
     pass
 
+from why_matched import find_local_model, load_llm
+from job_extraction import extract_job_features
+
 DB_USER = os.getenv("DB_USER", "postgres")
 DB_PASSWORD = os.getenv("DB_PASSWORD", "yuichirokanade")
 DB_HOST = os.getenv("DB_HOST", "localhost")
@@ -45,7 +47,6 @@ def get_conn():
 
 def load_models():
     from sentence_transformers import SentenceTransformer
-    from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
     cache_dir = "./model_cache"
@@ -54,14 +55,21 @@ def load_models():
     print(f"[INFO] Loading Bi-Encoder on {device}...")
     model = SentenceTransformer('all-MiniLM-L12-v2', cache_folder=cache_dir).to(device)
 
-    print("[INFO] Loading Flan-T5-Base...")
-    tokenizer = AutoTokenizer.from_pretrained("google/flan-t5-base", cache_dir=cache_dir)
-    gen_model = AutoModelForSeq2SeqLM.from_pretrained("google/flan-t5-base", cache_dir=cache_dir).to(device)
+    # Single local generative model (same GGUF the server uses; replaces
+    # the former Flan-T5 engine).  Missing model is not fatal: extraction
+    # then falls back to deterministic defaults.
+    llm = None
+    model_path = find_local_model()
+    if model_path:
+        print(f"[INFO] Loading local LLM ({os.path.basename(model_path)})...")
+        llm = load_llm(model_path, n_ctx=2048, n_threads=int(os.getenv("WHY_MATCHED_THREADS", "2")))
+    else:
+        print("[WARN] No GGUF model found; using deterministic defaults for features.")
 
-    return model, tokenizer, gen_model, device
+    return model, llm, device
 
 
-def vectorize_job(model, tokenizer, gen_model, device, job):
+def vectorize_job(model, llm, job):
     job_id = job["id"]
     job_title = job["job_title"] or ""
     employer_name = job["employer_name"] or ""
@@ -82,31 +90,16 @@ def vectorize_job(model, tokenizer, gen_model, device, job):
     embedding_tensor = model.encode(rich_context, convert_to_tensor=False)
     embedding_list = embedding_tensor.tolist()
 
-    # --- Flan-T5 feature extraction ---
-    prompt = (
-        f"Context: {job_description} {physical_requirements}\n"
-        "Question: What is the task intensity (Low, Medium, High)? Does it offer schedule flexibility (Yes, No)? List the professional skills.\n"
-        "Answer format: Intensity: [type], Flexibility: [Yes/No], Skills: [comma separated list]"
-    )
-    inputs = tokenizer(prompt, return_tensors="pt").to(device)
-    outputs = gen_model.generate(**inputs, max_new_tokens=100)
-    extraction_text = tokenizer.decode(outputs[0], skip_special_tokens=True)
-
+    # --- Local-LLM feature extraction (Qwen2.5 GGUF, replaces Flan-T5) ---
     intensity = "Medium"
     flexibility = 0
     skills = ""
     try:
-        int_match = re.search(r'Intensity:\s*(\w+)', extraction_text)
-        if int_match:
-            intensity = int_match.group(1).strip()
-
-        flex_match = re.search(r'Flexibility:\s*(\w+)', extraction_text)
-        if flex_match and flex_match.group(1).lower() == 'yes':
-            flexibility = 1
-
-        skill_match = re.search(r'Skills:\s*(.*)', extraction_text)
-        if skill_match:
-            skills = skill_match.group(1).strip()
+        features = extract_job_features(llm, job_description, physical_requirements)
+        if features["intensity"]:
+            intensity = features["intensity"]
+        flexibility = features["flexibility"]
+        skills = features["skills"]
     except Exception:
         pass
 
@@ -144,13 +137,13 @@ def main():
         conn.close()
         return
 
-    model, tokenizer, gen_model, device = load_models()
+    model, llm, device = load_models()
 
     success = 0
     for j in jobs:
         try:
             embedding, intensity, flexibility, skills = vectorize_job(
-                model, tokenizer, gen_model, device, j
+                model, llm, j
             )
             cur = conn.cursor(cursor_factory=RealDictCursor)
             cur.execute(
