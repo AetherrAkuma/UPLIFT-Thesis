@@ -1,7 +1,8 @@
 import { useEffect, useRef } from 'react';
 
-export function useFocusTrap(active) {
-    const containerRef = useRef(null);
+export function useFocusTrap(active, passedRef = null) {
+    const internalRef = useRef(null);
+    const containerRef = passedRef || internalRef;
 
     useEffect(() => {
         if (!active || !containerRef.current) return;
@@ -28,7 +29,9 @@ export function useFocusTrap(active) {
 
         document.addEventListener('keydown', handleKeyDown);
         return () => document.removeEventListener('keydown', handleKeyDown);
-    }, [active]);
+    }, [active, containerRef]);
 
     return containerRef;
 }
+
+export default useFocusTrap;

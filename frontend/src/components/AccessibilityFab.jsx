@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAccessibility } from '../context/AccessibilityContext';
 import { Accessibility, X, Sun, Moon, Contrast, Droplet, Plus, Minus, Type, MousePointer2, RotateCcw, Volume2, Square, Eye } from 'lucide-react';
 import { useFocusTrap } from '../hooks/useFocusTrap';
@@ -7,7 +7,8 @@ const AccessibilityFab = () => {
     const [isOpen, setIsOpen] = useState(false);
     const { config, updateConfig, resetA11y } = useAccessibility();
     const [isReading, setIsReading] = useState(false);
-    const panelRef = useFocusTrap(isOpen);
+    const panelRef = useRef(null);
+    useFocusTrap(isOpen, panelRef);
 
     const close = useCallback(() => setIsOpen(false), []);
 

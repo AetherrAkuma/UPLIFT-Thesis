@@ -54,7 +54,8 @@ const Landing = () => {
     const [confirmPassword, setConfirmPassword] = useState('');
     const [showNewPassword, setShowNewPassword] = useState(false);
     const [isScrolled, setIsScrolled] = useState(false);
-    const authModalRef = useFocusTrap(!!authMode);
+    const authModalRef = useRef(null);
+    useFocusTrap(!!authMode, authModalRef);
     const [regStep, setRegStep] = useState(0);
     const [regDisabilities, setRegDisabilities] = useState([]);
     const [regEducation, setRegEducation] = useState([{ level: 'Senior High School', institution: '', degree: '', area: '', start_date: '', end_date: '' }]);

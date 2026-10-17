@@ -8,9 +8,18 @@ export default defineConfig({
     react(),
     tailwindcss(),
   ],
+  resolve: {
+    dedupe: ['react', 'react-dom']
+  },
+  optimizeDeps: {
+    include: ['react', 'react-dom', 'react-dom/client', 'react-router-dom']
+  },
   server: {
     host: '0.0.0.0',
     allowedHosts: true,
+    headers: {
+      'Cache-Control': 'no-store, no-cache, must-revalidate'
+    },
     proxy: {
       '/api': {
         target: 'http://127.0.0.1:8000',
