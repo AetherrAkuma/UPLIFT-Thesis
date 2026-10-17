@@ -117,7 +117,7 @@ def free_port_if_occupied(port, service_name="Service"):
     print(f"[INFO] Port {port} ({service_name}) is currently occupied. Checking for stale process...")
     try:
         netstat = subprocess.run(
-            f'netstat -ano -p tcp | findstr /R ":{port} .*LISTENING"',
+            'netstat -ano -p tcp',
             shell=True,
             capture_output=True,
             text=True
@@ -125,8 +125,11 @@ def free_port_if_occupied(port, service_name="Service"):
         pids = set()
         for line in netstat.stdout.splitlines():
             parts = line.strip().split()
+            # Format: TCP  [Local Address]  [Foreign Address]  LISTENING  [PID]
             if len(parts) >= 5 and parts[3] == "LISTENING":
-                pids.add(parts[4])
+                local_addr = parts[1]
+                if local_addr.endswith(f":{port}"):
+                    pids.add(parts[4])
 
         for pid in pids:
             if pid and pid != "0":

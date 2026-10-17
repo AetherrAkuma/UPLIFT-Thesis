@@ -117,6 +117,39 @@ def _format_phone(raw_phone: str) -> Optional[str]:
     return None
 
 
+def _extract_username(val: str, network: str) -> str:
+    """Extract clean username/handle from a URL or raw username."""
+    if not val:
+        return ""
+    v = str(val).strip().rstrip("/")
+    if network.lower() == "linkedin":
+        m = re.search(r"linkedin\.com/(?:in|company)/([^/?#]+)", v, re.IGNORECASE)
+        if m:
+            return m.group(1)
+    elif network.lower() == "github":
+        m = re.search(r"github\.com/([^/?#]+)", v, re.IGNORECASE)
+        if m:
+            return m.group(1)
+    v = v.lstrip("@")
+    if "/" in v:
+        v = v.split("/")[-1]
+    return v
+
+
+def _clean_highlights(raw) -> Optional[list]:
+    """Ensure highlights are a clean list of strings for RenderCV."""
+    if not raw:
+        return None
+    if isinstance(raw, list):
+        cleaned = [str(x).strip().lstrip("- •*").strip() for x in raw if str(x).strip()]
+        return cleaned if cleaned else None
+    if isinstance(raw, str):
+        lines = [line.strip().lstrip("- •*").strip() for line in raw.split("\n")]
+        cleaned = [line for line in lines if line]
+        return cleaned if cleaned else None
+    return None
+
+
 def _build_yaml(user_profile: dict, theme: str) -> str:
     """Build a RenderCV-compatible YAML string from user profile data."""
     name = (user_profile.get("name") or "Candidate").strip()
@@ -159,41 +192,56 @@ def _build_yaml(user_profile: dict, theme: str) -> str:
 
     # Certifications
     certs_raw = user_profile.get("certifications", "")
-    cert_entries = _parse_normal_entries(certs_raw, "Certification")
+    cert_entries = _parse_bullet_entries(certs_raw)
     if cert_entries:
         sections["Certifications"] = cert_entries
 
     # Awards
     awards_raw = user_profile.get("awards", "")
-    award_entries = _parse_normal_entries(awards_raw, "Award")
+    award_entries = _parse_bullet_entries(awards_raw)
     if award_entries:
-        sections["Awards"] = award_entries
+        sections["Awards & Honors"] = award_entries
 
     # Build YAML manually
     lines = []
     lines.append("cv:")
     lines.append(f"  name: \"{_yaml_escape(name)}\"")
+    if location:
+        lines.append(f"  location: \"{_yaml_escape(location)}\"")
     if email:
         lines.append(f"  email: \"{_yaml_escape(email)}\"")
 
     if formatted_phone and _is_valid_rendercv_phone(formatted_phone):
         lines.append(f"  phone: \"{_yaml_escape(formatted_phone)}\"")
-        if location:
-            lines.append(f"  location: \"{_yaml_escape(location)}\"")
-    else:
-        # Fallback to custom_connections to preserve order: phone then location
-        customs = []
-        if raw_phone:
-            customs.append(("phone", raw_phone))
-        if location:
-            customs.append(("location-dot", location))
+    elif raw_phone:
+        lines.append("  custom_connections:")
+        lines.append("    - fontawesome_icon: \"phone\"")
+        lines.append(f"      placeholder: \"{_yaml_escape(raw_phone)}\"")
+        lines.append("      url: null")
 
-        if customs:
-            lines.append("  custom_connections:")
-            for icon, val in customs:
-                lines.append(f"    - fontawesome_icon: \"{icon}\"")
-                lines.append(f"      placeholder: \"{_yaml_escape(val)}\"")
-                lines.append("      url: null")
+    website = (user_profile.get("website") or user_profile.get("portfolio") or "").strip()
+    if website:
+        if not (website.startswith("http://") or website.startswith("https://")):
+            website = f"https://{website}"
+        lines.append(f"  website: \"{_yaml_escape(website)}\"")
+
+    socials = []
+    linkedin = (user_profile.get("linkedin") or "").strip()
+    github = (user_profile.get("github") or "").strip()
+    if linkedin:
+        u = _extract_username(linkedin, "LinkedIn")
+        if u:
+            socials.append(("LinkedIn", u))
+    if github:
+        u = _extract_username(github, "GitHub")
+        if u:
+            socials.append(("GitHub", u))
+
+    if socials:
+        lines.append("  social_networks:")
+        for net, uname in socials:
+            lines.append(f"    - network: \"{net}\"")
+            lines.append(f"      username: \"{_yaml_escape(uname)}\"")
 
     lines.append("  sections:")
 
@@ -229,15 +277,10 @@ def _build_yaml(user_profile: dict, theme: str) -> str:
                         lines.append(f"        details: \" \"")
 
     lines.append("")
-    lines.append("")
-    lines.append(f"design:")
+    lines.append("design:")
     lines.append(f"  theme: {theme}")
-    lines.append(f"  entries:")
-    lines.append(f"    degree_width: 3.5cm")
-    lines.append(f"  templates:")
-    lines.append(f"    education_entry:")
-    lines.append(f"      degree_column: \"\"")
-    lines.append(f"      main_column: \"**INSTITUTION**, DEGREE in AREA\\nSUMMARY\\nHIGHLIGHTS\"")
+    lines.append("  entries:")
+    lines.append("    degree_width: 1.5cm")
     lines.append("")
     lines.append("locale:")
     lines.append("  language: english")
@@ -285,38 +328,53 @@ def _parse_education(raw) -> list:
 
 
 def _clean_education_degree_and_area(degree: str, area: str):
-    """Clean and split degree and major/area so RenderCV formats cleanly without narrow column wrapping."""
+    """Clean and split degree and major/area so RenderCV formats cleanly in the classic 2-column layout."""
     degree = (degree or "").strip()
     area = (area or "").strip()
 
     DEGREE_PREFIXES = [
-        ("bachelor of science in ", "Bachelor of Science"),
-        ("bachelor of arts in ", "Bachelor of Arts"),
-        ("bachelor of science ", "Bachelor of Science"),
-        ("bachelor of arts ", "Bachelor of Arts"),
-        ("bs in ", "Bachelor of Science"),
-        ("ba in ", "Bachelor of Arts"),
-        ("bs ", "Bachelor of Science"),
-        ("ba ", "Bachelor of Arts"),
-        ("bachelor in ", "Bachelor's Degree"),
-        ("bachelor's in ", "Bachelor's Degree"),
-        ("bachelor of ", "Bachelor's Degree"),
-        ("master of science in ", "Master of Science"),
-        ("master of arts in ", "Master of Arts"),
-        ("ms in ", "Master of Science"),
-        ("ms ", "Master of Science"),
-        ("master in ", "Master's Degree"),
-        ("master's in ", "Master's Degree"),
+        ("bachelor of science in ", "BS"),
+        ("bachelor of arts in ", "BA"),
+        ("bachelor of science ", "BS"),
+        ("bachelor of arts ", "BA"),
+        ("bs in ", "BS"),
+        ("ba in ", "BA"),
+        ("bs ", "BS"),
+        ("ba ", "BA"),
+        ("bachelor in ", "BS"),
+        ("bachelor's in ", "BS"),
+        ("bachelor of ", "BS"),
+        ("master of science in ", "MS"),
+        ("master of arts in ", "MA"),
+        ("ms in ", "MS"),
+        ("ms ", "MS"),
+        ("master in ", "MS"),
+        ("master's in ", "MS"),
         ("doctor of philosophy in ", "PhD"),
         ("phd in ", "PhD"),
-        ("associate in ", "Associate Degree"),
-        ("associate of ", "Associate Degree"),
-        ("diploma in ", "Diploma"),
-        ("certificate in ", "Certificate"),
-        ("senior high school - ", "Senior High School"),
-        ("senior high school ", "Senior High School"),
-        ("high school ", "High School")
+        ("associate in ", "AS"),
+        ("associate of ", "AS"),
+        ("diploma in ", "Dip"),
+        ("certificate in ", "Cert"),
+        ("senior high school - ", "SHS"),
+        ("senior high school ", "SHS"),
+        ("high school ", "HS")
     ]
+
+    DEGREE_SHORT_MAP = {
+        "bachelor of science": "BS",
+        "bachelor of arts": "BA",
+        "master of science": "MS",
+        "master of arts": "MA",
+        "doctor of philosophy": "PhD",
+        "phd": "PhD",
+        "bachelor's degree": "BS",
+        "master's degree": "MS",
+        "senior high school": "SHS",
+        "high school": "HS",
+        "college": "BS",
+        "masteral/doctoral": "PhD"
+    }
 
     if not degree and not area:
         return "", "General Studies"
@@ -329,17 +387,23 @@ def _clean_education_degree_and_area(degree: str, area: str):
         for prefix, deg_name in DEGREE_PREFIXES:
             if degree.lower().startswith(prefix):
                 return deg_name, degree[len(prefix):].strip()
-        return "", degree
+        d_lower = degree.lower()
+        if d_lower in DEGREE_SHORT_MAP:
+            return DEGREE_SHORT_MAP[d_lower], ""
+        return degree, ""
 
     # If both degree and area are supplied
+    d_lower = degree.lower()
+    if d_lower in DEGREE_SHORT_MAP:
+        degree = DEGREE_SHORT_MAP[d_lower]
+
     if degree.lower() == area.lower() or area.lower() in degree.lower():
         for prefix, deg_name in DEGREE_PREFIXES:
             if degree.lower().startswith(prefix):
                 clean_area = degree[len(prefix):].strip() or area
                 return deg_name, clean_area
-        return "", area
+        return degree, area
 
-    # If degree has a prefix like "BS Information Technology" but area is "Information Technology"
     for prefix, deg_name in DEGREE_PREFIXES:
         if degree.lower().startswith(prefix):
             return deg_name, area
@@ -386,7 +450,7 @@ def _education_entry(data: dict) -> dict:
         "end_date": data.get("end_date") or data.get("graduation_date") or "",
         "location": data.get("location") or "",
         "summary": data.get("summary") or None,
-        "highlights": data.get("highlights") or None,
+        "highlights": _clean_highlights(data.get("highlights")),
     }
 
 
@@ -456,7 +520,7 @@ def _experience_entry(data: dict) -> dict:
         "end_date": data.get("end_date") or "",
         "location": data.get("location") or "",
         "summary": data.get("summary") or None,
-        "highlights": data.get("highlights") or None,
+        "highlights": _clean_highlights(data.get("highlights") or data.get("responsibilities") or data.get("description")),
     }
 
 
@@ -469,35 +533,34 @@ def _parse_skills(raw) -> list:
     if not raw:
         return []
 
+def _clean_skill_text(text: str) -> str:
+    if not text:
+        return ""
+    clean = str(text).strip().lstrip("- •*").strip()
+    clean = re.sub(r'^(?:core\s+skills?|technical\s+skills?)\s*[:\-–—]\s*', '', clean, flags=re.IGNORECASE).strip()
+    return clean
+
+
+def _parse_skills(raw) -> list:
+    """Parse skills into RenderCV bullet entries so each skill is on its own line."""
+    if not raw:
+        return []
+
     # 1. If already a list
     if isinstance(raw, list):
-        if raw and isinstance(raw[0], dict):
-            entries = []
-            for e in raw:
-                lbl = str(e.get("label", "")).strip()
-                det = str(e.get("details", "")).strip()
-                if lbl or det:
-                    entries.append({"label": lbl, "details": det or " "})
-            return entries
-
-        # List of strings
-        items = [str(s).strip() for s in raw if s and str(s).strip()]
-        if items:
-            categorized = []
-            flat_items = []
-            for item in items:
-                if ":" in item:
-                    cat, val = item.split(":", 1)
-                    if cat.strip() and val.strip():
-                        categorized.append({"label": cat.strip(), "details": val.strip()})
-                    else:
-                        flat_items.append(item)
-                else:
-                    flat_items.append(item)
-            if flat_items:
-                categorized.append({"label": "Core Skills", "details": ", ".join(flat_items)})
-            return categorized
-        return []
+        entries = []
+        for item in raw:
+            if isinstance(item, dict):
+                b = item.get("bullet") or item.get("name") or item.get("details") or item.get("label")
+                c = _clean_skill_text(b)
+                if c:
+                    entries.append({"bullet": c})
+            elif isinstance(item, str) and item.strip():
+                for line in item.split("\n"):
+                    c = _clean_skill_text(line)
+                    if c:
+                        entries.append({"bullet": c})
+        return entries
 
     # 2. If it's a dict
     if isinstance(raw, dict):
@@ -508,7 +571,12 @@ def _parse_skills(raw) -> list:
             else:
                 val = str(items).strip()
             if val:
-                result.append({"label": str(category).strip(), "details": val})
+                c_val = _clean_skill_text(val)
+                cat_clean = _clean_skill_text(category)
+                if cat_clean and c_val:
+                    result.append({"bullet": f"{cat_clean}: {c_val}"})
+                elif c_val:
+                    result.append({"bullet": c_val})
         return result
 
     # 3. If it's a string
@@ -524,27 +592,67 @@ def _parse_skills(raw) -> list:
         except (json.JSONDecodeError, TypeError):
             pass
 
-        # Split lines first to check for category prefixes like "Programming: Python, SQL"
-        lines = [l.strip().lstrip("- •*").strip() for l in raw_str.split("\n") if l.strip()]
-        categorized = []
-        flat_items = []
+        # Split into individual skill items
+        if "\n" in raw_str:
+            parts = [_clean_skill_text(l) for l in raw_str.split("\n") if l.strip()]
+        else:
+            parts = [_clean_skill_text(p) for p in raw_str.split(",") if p.strip()]
 
-        for line in lines:
-            if ":" in line:
-                cat, val = line.split(":", 1)
-                if cat.strip() and val.strip():
-                    categorized.append({"label": cat.strip(), "details": val.strip()})
-                else:
-                    parts = [p.strip() for p in line.split(",") if p.strip()]
-                    flat_items.extend(parts)
-            else:
-                parts = [p.strip() for p in line.split(",") if p.strip()]
-                flat_items.extend(parts)
+        return [{"bullet": p} for p in parts if p]
 
-        if flat_items:
-            categorized.append({"label": "Core Skills", "details": ", ".join(flat_items)})
+    return []
 
-        return categorized
+
+def _split_line_items(text: str) -> list:
+    if not text:
+        return []
+    lines = []
+    if "\n" in text:
+        raw_lines = text.split("\n")
+    elif ". " in text:
+        raw_lines = text.split(". ")
+    elif "; " in text:
+        raw_lines = text.split("; ")
+    else:
+        raw_lines = [text]
+    for l in raw_lines:
+        clean = l.strip().lstrip("- •*").rstrip(".").strip()
+        if clean:
+            lines.append(clean)
+    return lines
+
+
+def _parse_bullet_entries(raw) -> list:
+    """Parse list of strings or JSON into BulletEntry dicts (bullet: text) for clean single-line bullet entries."""
+    if not raw:
+        return []
+    items = []
+    if isinstance(raw, list):
+        for x in raw:
+            if isinstance(x, str) and x.strip():
+                for part in _split_line_items(x):
+                    items.append({"bullet": part})
+            elif isinstance(x, dict):
+                b = (x.get("bullet") or x.get("name") or x.get("title") or "").strip()
+                if b:
+                    for part in _split_line_items(b):
+                        items.append({"bullet": part})
+        return items
+
+    if isinstance(raw, str):
+        if not raw.strip():
+            return []
+        try:
+            parsed = json.loads(raw)
+            if isinstance(parsed, list):
+                return _parse_bullet_entries(parsed)
+            elif isinstance(parsed, dict):
+                return _parse_bullet_entries(list(parsed.values()))
+        except (json.JSONDecodeError, TypeError):
+            pass
+        for part in _split_line_items(raw):
+            items.append({"bullet": part})
+        return items
 
     return []
 
@@ -563,7 +671,7 @@ def _parse_normal_entries(raw, default_name: str) -> list:
                     "name": name if name else default_name,
                     "summary": e.get("summary") or e.get("description") or "",
                     "date": e.get("date") or "",
-                    "highlights": e.get("highlights") or [],
+                    "highlights": _clean_highlights(e.get("highlights")) or [],
                 })
             elif isinstance(e, str) and e.strip():
                 entries.append({"name": e.strip(), "summary": "", "date": "", "highlights": []})
@@ -583,7 +691,7 @@ def _parse_normal_entries(raw, default_name: str) -> list:
                             "name": name if name else default_name,
                             "summary": e.get("summary") or e.get("description") or "",
                             "date": e.get("date") or "",
-                            "highlights": e.get("highlights") or [],
+                            "highlights": _clean_highlights(e.get("highlights")) or [],
                         })
                     elif isinstance(e, str) and e.strip():
                         entries.append({"name": e.strip(), "summary": "", "date": "", "highlights": []})

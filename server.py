@@ -445,6 +445,9 @@ def init_db():
     
     # NCDA AO No. 001 s.2021: PWD ID Reference Number for DOH registry alignment
     cursor.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS pwd_id_reference TEXT DEFAULT ''")
+    cursor.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS website TEXT DEFAULT ''")
+    cursor.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS linkedin TEXT DEFAULT ''")
+    cursor.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS github TEXT DEFAULT ''")
     
     # Admin and System Tables
     cursor.execute("""
@@ -952,6 +955,9 @@ class ProfileUpdate(BaseModel):
     email: Optional[str] = None
     contact_number: Optional[str] = None
     address: Optional[str] = None
+    website: Optional[str] = ""
+    linkedin: Optional[str] = ""
+    github: Optional[str] = ""
     summary: Optional[str] = ""
     skills: Optional[str] = ""
     disabilities: Optional[List[Any]] = []
@@ -1547,7 +1553,8 @@ async def update_profile_settings(req: ProfileSettingsRequest, user: dict = Depe
                    skill_weight, safety_weight, stamina_weight, 
                    physical_capabilities, preferred_intensity, requires_flexibility,
                    education, experience, projects, certifications, awards,
-                   auto_generate_resume, address, contact_number
+                   auto_generate_resume, address, contact_number,
+                   website, linkedin, github
             FROM users WHERE id = %s
         """, (user['id'],))
 
@@ -1655,7 +1662,8 @@ async def get_me(user: dict = Depends(get_current_user)):
                        skill_weight, safety_weight, stamina_weight, 
                        physical_capabilities, preferred_intensity, requires_flexibility,
                        education, experience, projects, certifications, awards,
-                       auto_generate_resume, address, contact_number
+                       auto_generate_resume, address, contact_number,
+                       website, linkedin, github
                 FROM users WHERE id = %s
             """, (user['id'],))
             row = cursor.fetchone()
@@ -1909,6 +1917,9 @@ async def update_pwd_profile(req: ProfileUpdate, user: dict = Depends(RoleChecke
     email = (req.email if req.email is not None else user.get('email', '')).strip().lower()
     address = (req.address if req.address is not None else user.get('address', '')).strip()
     contact_number = (req.contact_number if req.contact_number is not None else user.get('contact_number', '')).strip()
+    website = (req.website if req.website is not None else user.get('website', '')).strip()
+    linkedin = (req.linkedin if req.linkedin is not None else user.get('linkedin', '')).strip()
+    github = (req.github if req.github is not None else user.get('github', '')).strip()
 
     if email and email != user.get('email', '').lower():
         cursor.execute("SELECT id FROM users WHERE LOWER(email) = %s AND id != %s", (email, user['id']))
@@ -1927,6 +1938,7 @@ async def update_pwd_profile(req: ProfileUpdate, user: dict = Depends(RoleChecke
     cursor.execute("""
         UPDATE users 
         SET name = %s, email = %s, address = %s, contact_number = %s,
+            website = %s, linkedin = %s, github = %s,
             summary = %s, skills = %s, disabilities = %s, 
             disability_profile = %s,
             skill_weight = %s, safety_weight = %s, stamina_weight = %s,
@@ -1939,6 +1951,9 @@ async def update_pwd_profile(req: ProfileUpdate, user: dict = Depends(RoleChecke
         email or user.get('email', ''),
         address,
         contact_number,
+        website,
+        linkedin,
+        github,
         req.summary or "", req.skills or "", dis_str,
         dp_str,
         req.skill_weight if req.skill_weight is not None else 0.5,
@@ -1966,7 +1981,8 @@ async def update_pwd_profile(req: ProfileUpdate, user: dict = Depends(RoleChecke
                skill_weight, safety_weight, stamina_weight, 
                physical_capabilities, preferred_intensity, requires_flexibility,
                education, experience, projects, certifications, awards,
-               auto_generate_resume, address, contact_number
+               auto_generate_resume, address, contact_number,
+               website, linkedin, github
         FROM users WHERE id = %s
     """, (user['id'],))
     row = cursor.fetchone()
@@ -3112,7 +3128,7 @@ async def generate_resume_endpoint(
     cursor.execute("""
         SELECT id, email, name, role, summary, skills, 
                education, experience, projects, certifications, awards,
-               address, contact_number
+               address, contact_number, website, linkedin, github
         FROM users WHERE id = %s
     """, (user['id'],))
     db_profile = cursor.fetchone()

@@ -16,14 +16,14 @@ try {
     pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
 }
 
-const PDFViewer = ({ pdfData, fileName = 'Applicant_Resume.pdf', className = '' }) => {
+const PDFViewer = ({ pdfData, fileName = 'Applicant_Resume.pdf', className = '', initialScale = 1.0 }) => {
     const canvasRef = useRef(null);
     const containerRef = useRef(null);
     
     const [pdfDoc, setPdfDoc] = useState(null);
     const [pageNum, setPageNum] = useState(1);
     const [numPages, setNumPages] = useState(0);
-    const [scale, setScale] = useState(1.15);
+    const [scale, setScale] = useState(initialScale);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [isFullscreen, setIsFullscreen] = useState(false);
@@ -125,9 +125,9 @@ const PDFViewer = ({ pdfData, fileName = 'Applicant_Resume.pdf', className = '' 
         };
     }, [pdfDoc, pageNum, scale]);
 
-    const handleZoomIn = () => setScale(prev => Math.min(prev + 0.2, 2.5));
-    const handleZoomOut = () => setScale(prev => Math.max(prev - 0.2, 0.6));
-    const handleResetZoom = () => setScale(1.15);
+    const handleZoomIn = () => setScale(prev => Math.min(Number((prev + 0.1).toFixed(2)), 2.5));
+    const handleZoomOut = () => setScale(prev => Math.max(Number((prev - 0.1).toFixed(2)), 0.5));
+    const handleResetZoom = () => setScale(initialScale);
 
     const handlePrevPage = () => setPageNum(prev => Math.max(prev - 1, 1));
     const handleNextPage = () => setPageNum(prev => Math.min(prev + 1, numPages));
@@ -249,31 +249,33 @@ const PDFViewer = ({ pdfData, fileName = 'Applicant_Resume.pdf', className = '' 
             </div>
 
             {/* Canvas Viewer Area */}
-            <div className="flex-1 overflow-auto p-4 sm:p-8 flex items-center justify-center bg-slate-900/90 min-h-[450px] relative">
-                {loading && (
-                    <div className="flex flex-col items-center gap-3 text-slate-400 py-16">
-                        <Loader2 size={32} className="animate-spin text-blue-500" />
-                        <p className="text-xs font-bold uppercase tracking-wider">Rendering High-Definition Document...</p>
-                    </div>
-                )}
+            <div className="flex-1 overflow-auto p-4 sm:p-6 bg-slate-900/95 min-h-[450px] relative flex justify-center">
+                <div className="min-w-fit min-h-full flex flex-col items-center justify-start py-2">
+                    {loading && (
+                        <div className="flex flex-col items-center justify-center gap-3 text-slate-400 py-24 m-auto">
+                            <Loader2 size={32} className="animate-spin text-blue-500" />
+                            <p className="text-xs font-bold uppercase tracking-wider">Rendering High-Definition Document...</p>
+                        </div>
+                    )}
 
-                {error && (
-                    <div className="flex flex-col items-center gap-3 text-center p-8 max-w-md bg-slate-800/80 rounded-2xl border border-slate-700">
-                        <AlertCircle size={36} className="text-amber-400" />
-                        <p className="text-sm font-bold text-slate-200">{error}</p>
-                        <button
-                            onClick={handleDownload}
-                            className="mt-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-black uppercase tracking-wider rounded-xl transition-all"
-                        >
-                            Download Raw PDF File
-                        </button>
-                    </div>
-                )}
+                    {error && (
+                        <div className="flex flex-col items-center justify-center gap-3 text-center p-8 max-w-md bg-slate-800/80 rounded-2xl border border-slate-700 m-auto">
+                            <AlertCircle size={36} className="text-amber-400" />
+                            <p className="text-sm font-bold text-slate-200">{error}</p>
+                            <button
+                                onClick={handleDownload}
+                                className="mt-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-black uppercase tracking-wider rounded-xl transition-all"
+                            >
+                                Download Raw PDF File
+                            </button>
+                        </div>
+                    )}
 
-                <canvas
-                    ref={canvasRef}
-                    className={`rounded-lg shadow-[0_20px_50px_rgba(0,0,0,0.5)] bg-white transition-transform duration-100 ${loading || error ? 'hidden' : 'block'}`}
-                />
+                    <canvas
+                        ref={canvasRef}
+                        className={`rounded-lg shadow-[0_20px_60px_rgba(0,0,0,0.6)] bg-white shrink-0 ${loading || error ? 'hidden' : 'block'}`}
+                    />
+                </div>
             </div>
         </div>
     );

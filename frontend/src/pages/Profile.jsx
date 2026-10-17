@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { useNavigate } from 'react-router-dom';
@@ -8,7 +8,7 @@ import {
     User, Briefcase, Sliders, ChevronRight, Save, 
     CheckCircle2, Accessibility, GraduationCap, Building2, Terminal, 
     Award, Sparkles, LayoutDashboard, Plus, FileText, Trash2, ArrowLeft, ArrowRight, Calendar,
-    Mail, Phone, MapPin
+    Mail, Phone, MapPin, Globe, Link2, Code
 } from 'lucide-react';
 import PDFViewer from '../components/PDFViewer';
 
@@ -45,6 +45,93 @@ const QUICK_SUGGESTIONS = {
     'awards': ['Employee of the Month', 'Academic Excellence', 'Community Leader']
 };
 
+const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+const toMonthValue = (v) => {
+    if (!v) return '';
+    if (/^\d{4}$/.test(v)) return `${v}-01`;
+    if (/^\d{4}-\d{2}$/.test(v)) return v;
+    return '';
+};
+
+const isPresent = (v) => !v || !/^\d{4}(-\d{2})?$/.test(v);
+
+const currentMonth = () => new Date().toISOString().slice(0, 7);
+
+const formatMonthDisplay = (val) => {
+    if (!val) return '';
+    const m = String(val).match(/^(\d{4})-(\d{1,2})$/);
+    if (!m) return val;
+    const year = m[1];
+    const monthNum = parseInt(m[2], 10);
+    const monthName = MONTH_NAMES[monthNum - 1] || '';
+    return monthName ? `${monthName} ${year}` : val;
+};
+
+const buildDateRange = (startDate, endDate, isPres) => {
+    const startDisp = formatMonthDisplay(startDate);
+    if (isPres) {
+        return startDisp ? `${startDisp} – present` : 'present';
+    }
+    const endDisp = formatMonthDisplay(endDate);
+    if (startDisp && endDisp) {
+        return `${startDisp} – ${endDisp}`;
+    }
+    return startDisp || endDisp || '';
+};
+
+const extractMonthYear = (str) => {
+    if (!str) return '';
+    const clean = String(str).trim();
+    if (/^\d{4}-\d{2}$/.test(clean)) return clean;
+    const monthMatch = clean.match(/(Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\.?,?\s*(\d{4})/i);
+    if (monthMatch) {
+        const mStr = monthMatch[1].toLowerCase().slice(0, 3);
+        const map = { jan: '01', feb: '02', mar: '03', apr: '04', may: '05', jun: '06', jul: '07', aug: '08', sep: '09', oct: '10', nov: '11', dec: '12' };
+        const mm = map[mStr] || '01';
+        return `${monthMatch[2]}-${mm}`;
+    }
+    const yearMatch = clean.match(/\b(19\d\d|20\d\d)\b/);
+    if (yearMatch) {
+        return `${yearMatch[1]}-01`;
+    }
+    return '';
+};
+
+const parseDateRangeStringToMonths = (dateStr) => {
+    if (!dateStr) return { start_date: '', end_date: '', is_present: false };
+    const clean = String(dateStr).trim();
+    if (!clean) return { start_date: '', end_date: '', is_present: false };
+
+    const isPres = /present|current|ongoing|now/i.test(clean);
+    const parts = clean.split(/\s*[-–—to]+\s*/i);
+
+    const start_date = extractMonthYear(parts[0] || '');
+    let end_date = '';
+    if (!isPres && parts.length > 1) {
+        end_date = extractMonthYear(parts[1] || '');
+    }
+    return { start_date, end_date, is_present: isPres };
+};
+
+const splitLineItems = (str) => {
+    if (!str) return [];
+    const clean = String(str).trim();
+    if (!clean) return [];
+    const lines = clean.split(/\r?\n+/);
+    const result = [];
+    for (const line of lines) {
+        const stripped = line.trim().replace(/^[-•*]\s*/, '');
+        if (!stripped) continue;
+        const parts = stripped.split(/(?<=[a-zA-Z0-9])\.\s+(?=[A-Z0-9])|;\s+/);
+        for (const p of parts) {
+            const trimmedP = p.trim().replace(/\.$/, '').replace(/^[-•*]\s*/, '').trim();
+            if (trimmedP) result.push(trimmedP);
+        }
+    }
+    return result;
+};
+
 const parseSingleExperienceString = (str) => {
     const text = String(str).trim().replace(/^[-•*]\s*/, '');
     if (!text) return null;
@@ -76,52 +163,92 @@ const parseSingleExperienceString = (str) => {
 };
 
 const parseExperienceEntries = (raw) => {
-    if (!raw) return [{ company: '', position: '', year: '' }];
+    const defaultEntry = { company: '', position: '', year: '', start_date: '', end_date: '', is_present: false, location: '', highlights: [''] };
+    if (!raw) return [{ ...defaultEntry }];
     if (Array.isArray(raw)) {
         const list = raw.map(x => {
             if (typeof x === 'object' && x !== null) {
+                let hl = [''];
+                if (Array.isArray(x.highlights)) {
+                    hl = x.highlights.map(h => String(h).trim().replace(/^[-•*]\s*/, '')).filter(Boolean);
+                    if (hl.length === 0) hl = [''];
+                } else if (typeof x.highlights === 'string' && x.highlights.trim()) {
+                    hl = x.highlights.split('\n').map(h => h.trim().replace(/^[-•*]\s*/, '')).filter(Boolean);
+                    if (hl.length === 0) hl = [''];
+                }
+                const yr = x.year || x.date || x.duration || '';
+                const parsedDates = parseDateRangeStringToMonths(yr);
+                const startDate = x.start_date ? toMonthValue(x.start_date) : parsedDates.start_date;
+                const isPres = x.is_present !== undefined ? !!x.is_present : parsedDates.is_present;
+                const endDate = isPres ? '' : (x.end_date ? toMonthValue(x.end_date) : parsedDates.end_date);
+                const displayYear = yr || buildDateRange(startDate, endDate, isPres);
+
                 return {
                     company: x.company || x.organization || '',
                     position: x.position || x.role || x.title || '',
-                    year: x.year || x.date || x.duration || ''
+                    year: displayYear,
+                    start_date: startDate,
+                    end_date: endDate,
+                    is_present: isPres,
+                    location: x.location || '',
+                    highlights: hl
                 };
             }
             if (typeof x === 'string') {
-                return parseSingleExperienceString(x);
+                const s = parseSingleExperienceString(x);
+                if (!s) return null;
+                const parsedDates = parseDateRangeStringToMonths(s.year);
+                return {
+                    ...s,
+                    start_date: parsedDates.start_date,
+                    end_date: parsedDates.end_date,
+                    is_present: parsedDates.is_present,
+                    location: '',
+                    highlights: ['']
+                };
             }
             return null;
         }).filter(Boolean);
-        return list.length > 0 ? list : [{ company: '', position: '', year: '' }];
+        return list.length > 0 ? list : [{ ...defaultEntry }];
     }
     if (typeof raw === 'string') {
         const trimmed = raw.trim();
-        if (!trimmed) return [{ company: '', position: '', year: '' }];
+        if (!trimmed) return [{ ...defaultEntry }];
         try {
             const parsed = JSON.parse(trimmed);
             if (Array.isArray(parsed)) {
                 return parseExperienceEntries(parsed);
             }
             if (typeof parsed === 'object' && parsed !== null) {
-                return [{
-                    company: parsed.company || parsed.organization || '',
-                    position: parsed.position || parsed.role || parsed.title || '',
-                    year: parsed.year || parsed.date || parsed.duration || ''
-                }];
+                return parseExperienceEntries([parsed]);
             }
         } catch {
             // Not JSON
         }
         const lines = trimmed.includes('\n\n') ? trimmed.split(/\n\n+/) : trimmed.split('\n');
-        const list = lines.map(line => parseSingleExperienceString(line)).filter(Boolean);
-        return list.length > 0 ? list : [{ company: '', position: '', year: '' }];
+        const list = lines.map(line => {
+            const s = parseSingleExperienceString(line);
+            if (!s) return null;
+            const parsedDates = parseDateRangeStringToMonths(s.year);
+            return {
+                ...s,
+                start_date: parsedDates.start_date,
+                end_date: parsedDates.end_date,
+                is_present: parsedDates.is_present,
+                location: '',
+                highlights: ['']
+            };
+        }).filter(Boolean);
+        return list.length > 0 ? list : [{ ...defaultEntry }];
     }
-    return [{ company: '', position: '', year: '' }];
+    return [{ ...defaultEntry }];
 };
 
 const parseSkillsEntries = (raw) => {
     if (!raw) return [''];
+    const cleanSkill = (s) => String(s || '').trim().replace(/^(?:core\s+skills?|technical\s+skills?)\s*[:\-–—]\s*/i, '').trim();
     if (Array.isArray(raw)) {
-        const list = raw.map(s => typeof s === 'string' ? s.trim() : '').filter(Boolean);
+        const list = raw.map(s => typeof s === 'string' ? cleanSkill(s) : '').filter(Boolean);
         return list.length > 0 ? list : [''];
     }
     if (typeof raw === 'string') {
@@ -130,26 +257,160 @@ const parseSkillsEntries = (raw) => {
         try {
             const parsed = JSON.parse(trimmed);
             if (Array.isArray(parsed)) {
-                const list = parsed.map(s => typeof s === 'string' ? s.trim() : '').filter(Boolean);
+                const list = parsed.map(s => typeof s === 'string' ? cleanSkill(s) : '').filter(Boolean);
                 if (list.length > 0) return list;
             }
         } catch {
             // Not JSON
         }
-        const list = trimmed.split(',').map(s => s.trim()).filter(Boolean);
+        const list = trimmed.split(',').map(s => cleanSkill(s)).filter(Boolean);
         return list.length > 0 ? list : [''];
     }
     return [''];
 };
 
 const serializeExperience = (entries) => {
-    const valid = (entries || []).filter(e => (e.company || '').trim() || (e.position || '').trim() || (e.year || '').trim());
-    return JSON.stringify(valid.map(e => ({
-        company: (e.company || '').trim(),
-        position: (e.position || '').trim(),
-        year: (e.year || '').trim(),
-        date: (e.year || '').trim()
-    })));
+    const valid = (entries || []).filter(e => 
+        (e.company || '').trim() || 
+        (e.position || '').trim() || 
+        (e.year || '').trim() || 
+        e.start_date ||
+        (e.location || '').trim() || 
+        (Array.isArray(e.highlights) ? e.highlights.some(h => (h || '').trim()) : (e.highlights || '').trim())
+    );
+    return JSON.stringify(valid.map(e => {
+        const yearFormatted = (e.year || '').trim() || buildDateRange(e.start_date, e.end_date, e.is_present);
+        return {
+            company: (e.company || '').trim(),
+            position: (e.position || '').trim(),
+            year: yearFormatted,
+            date: yearFormatted,
+            start_date: e.start_date || '',
+            end_date: e.is_present ? '' : (e.end_date || ''),
+            is_present: !!e.is_present,
+            location: (e.location || '').trim(),
+            highlights: Array.isArray(e.highlights)
+                ? e.highlights.map(h => String(h).trim().replace(/^[-•*]\s*/, '')).filter(Boolean)
+                : (typeof e.highlights === 'string'
+                    ? e.highlights.split('\n').map(h => h.trim().replace(/^[-•*]\s*/, '')).filter(Boolean)
+                    : [])
+        };
+    }));
+};
+
+const parseProjectEntries = (raw) => {
+    const defaultProj = { name: '', date: '', start_date: '', end_date: '', is_present: false, summary: '', highlights: [''] };
+    if (!raw) return [{ ...defaultProj }];
+    if (Array.isArray(raw)) {
+        const list = raw.map(x => {
+            if (typeof x === 'object' && x !== null) {
+                let hl = [''];
+                if (Array.isArray(x.highlights)) {
+                    hl = x.highlights.map(h => String(h).trim().replace(/^[-•*]\s*/, '')).filter(Boolean);
+                    if (hl.length === 0) hl = [''];
+                } else if (typeof x.highlights === 'string' && x.highlights.trim()) {
+                    hl = x.highlights.split('\n').map(h => h.trim().replace(/^[-•*]\s*/, '')).filter(Boolean);
+                    if (hl.length === 0) hl = [''];
+                }
+                const dt = x.date || x.year || '';
+                const parsedDates = parseDateRangeStringToMonths(dt);
+                const startDate = x.start_date ? toMonthValue(x.start_date) : parsedDates.start_date;
+                const isPres = x.is_present !== undefined ? !!x.is_present : parsedDates.is_present;
+                const endDate = isPres ? '' : (x.end_date ? toMonthValue(x.end_date) : parsedDates.end_date);
+                const displayDate = dt || buildDateRange(startDate, endDate, isPres);
+
+                return {
+                    name: x.name || x.title || '',
+                    date: displayDate,
+                    start_date: startDate,
+                    end_date: endDate,
+                    is_present: isPres,
+                    summary: x.summary || x.description || '',
+                    highlights: hl
+                };
+            }
+            if (typeof x === 'string' && x.trim()) {
+                return { name: x.trim(), date: '', start_date: '', end_date: '', is_present: false, summary: '', highlights: [''] };
+            }
+            return null;
+        }).filter(Boolean);
+        return list.length > 0 ? list : [{ ...defaultProj }];
+    }
+    if (typeof raw === 'string') {
+        const trimmed = raw.trim();
+        if (!trimmed) return [{ ...defaultProj }];
+        try {
+            const parsed = JSON.parse(trimmed);
+            if (Array.isArray(parsed)) return parseProjectEntries(parsed);
+        } catch {
+            // Not JSON
+        }
+        const lines = trimmed.split('\n').map(l => l.trim()).filter(Boolean);
+        if (lines.length > 0) {
+            return [{ name: lines[0], date: '', start_date: '', end_date: '', is_present: false, summary: lines.slice(1).join(' '), highlights: [''] }];
+        }
+    }
+    return [{ ...defaultProj }];
+};
+
+const serializeProjects = (entries) => {
+    const valid = (entries || []).filter(e => 
+        (e.name || '').trim() || 
+        (e.date || '').trim() || 
+        e.start_date ||
+        (e.summary || '').trim() || 
+        (Array.isArray(e.highlights) && e.highlights.some(h => (h || '').trim()))
+    );
+    return JSON.stringify(valid.map(e => {
+        const dateFormatted = (e.date || '').trim() || buildDateRange(e.start_date, e.end_date, e.is_present);
+        return {
+            name: (e.name || '').trim(),
+            date: dateFormatted,
+            start_date: e.start_date || '',
+            end_date: e.is_present ? '' : (e.end_date || ''),
+            is_present: !!e.is_present,
+            summary: (e.summary || '').trim(),
+            highlights: Array.isArray(e.highlights)
+                ? e.highlights.map(h => String(h).trim().replace(/^[-•*]\s*/, '')).filter(Boolean)
+                : []
+        };
+    }));
+};
+
+const parseLineList = (raw) => {
+    if (!raw) return [''];
+    let items = [];
+    if (Array.isArray(raw)) {
+        for (const x of raw) {
+            if (typeof x === 'string') {
+                items.push(...splitLineItems(x));
+            } else if (typeof x === 'object' && x !== null) {
+                const val = (x.name || x.title || x.bullet || '').trim();
+                if (val) items.push(...splitLineItems(val));
+            }
+        }
+    } else if (typeof raw === 'string') {
+        const trimmed = raw.trim();
+        if (!trimmed) return [''];
+        try {
+            const parsed = JSON.parse(trimmed);
+            if (Array.isArray(parsed)) return parseLineList(parsed);
+        } catch {
+            // Not JSON
+        }
+        items.push(...splitLineItems(trimmed));
+    }
+    const clean = items.filter(Boolean);
+    return clean.length > 0 ? clean : [''];
+};
+
+const serializeLineList = (list) => {
+    const items = [];
+    for (const x of (list || [])) {
+        const s = String(x).trim().replace(/^[-•*]\s*/, '');
+        if (s) items.push(s);
+    }
+    return JSON.stringify(items);
 };
 
 const Profile = () => {
@@ -161,6 +422,9 @@ const Profile = () => {
         email: '',
         contact_number: '',
         address: '',
+        website: '',
+        linkedin: '',
+        github: '',
         summary: '',
         skills: '',
         disabilities: [],
@@ -183,17 +447,25 @@ const Profile = () => {
     const [disabilityProfile, setDisabilityProfile] = useState({ disabilities: [] });
     const [educEntries, setEducEntries] = useState([]);
     const [educStructured, setEducStructured] = useState(false);
-    const [expEntries, setExpEntries] = useState([{ company: '', position: '', year: '' }]);
+    const [expEntries, setExpEntries] = useState([{ company: '', position: '', year: '', location: '', highlights: [''] }]);
     const [skillEntries, setSkillEntries] = useState(['']);
+    const [projectEntries, setProjectEntries] = useState([{ name: '', date: '', summary: '', highlights: [''] }]);
+    const [awardEntries, setAwardEntries] = useState(['']);
+    const [certEntries, setCertEntries] = useState(['']);
+    const loadedUserIdRef = useRef(null);
 
     useEffect(() => {
-        if (user) {
+        if (user && loadedUserIdRef.current !== user.id) {
+            loadedUserIdRef.current = user.id;
             // eslint-disable-next-line react-hooks/set-state-in-effect
             setProfile({
                 name: user.name || '',
                 email: user.email || '',
                 contact_number: user.contact_number || '',
                 address: user.address || '',
+                website: user.website || '',
+                linkedin: user.linkedin || '',
+                github: user.github || '',
                 summary: user.summary || '',
                 skills: user.skills || '',
                 disabilities: user.disabilities || [],
@@ -212,6 +484,9 @@ const Profile = () => {
             });
             setExpEntries(parseExperienceEntries(user.experience));
             setSkillEntries(parseSkillsEntries(user.skills));
+            setProjectEntries(parseProjectEntries(user.projects));
+            setAwardEntries(parseLineList(user.awards));
+            setCertEntries(parseLineList(user.certifications));
             try {
                 const dp = (typeof user.disability_profile === 'object' && user.disability_profile) || JSON.parse(user.disability_profile || '{}');
                 const structured = dp && dp.disabilities ? dp : { disabilities: [] };
@@ -251,6 +526,9 @@ const Profile = () => {
         setSaveStatus(null);
         try {
             const expJson = serializeExperience(expEntries);
+            const projJson = serializeProjects(projectEntries);
+            const awardsJson = serializeLineList(awardEntries);
+            const certsJson = serializeLineList(certEntries);
             const joinedSkills = skillEntries.map(s => s.trim()).filter(Boolean).join(', ');
             const res = await axios.put(`${API_BASE_URL}/pwd/profile`, {
                 ...profile,
@@ -258,8 +536,14 @@ const Profile = () => {
                 email: profile.email,
                 contact_number: profile.contact_number,
                 address: profile.address,
+                website: profile.website,
+                linkedin: profile.linkedin,
+                github: profile.github,
                 skills: joinedSkills,
                 experience: expJson,
+                projects: projJson,
+                awards: awardsJson,
+                certifications: certsJson,
                 disability_profile: JSON.stringify(disabilityProfile),
                 education: educStructured ? JSON.stringify(educEntries) : profile.education
             }, {
@@ -269,9 +553,11 @@ const Profile = () => {
             setSaveStatus('success');
             toast.success("Profile saved successfully!");
             setTimeout(() => setSaveStatus(null), 3000);
+            return true;
         } catch (err) {
             setSaveStatus('error');
             toast.error("Failed to save profile: " + (err.response?.data?.detail || "Unknown error"));
+            return false;
         } finally {
             setSaving(false);
         }
@@ -281,6 +567,9 @@ const Profile = () => {
         setGeneratingResume(true);
         try {
             const expJson = serializeExperience(expEntries);
+            const projJson = serializeProjects(projectEntries);
+            const awardsJson = serializeLineList(awardEntries);
+            const certsJson = serializeLineList(certEntries);
             const joinedSkills = skillEntries.map(s => s.trim()).filter(Boolean).join(', ');
             const res = await axios.post(`${API_BASE_URL}/resume/generate`, {
                 name: profile.name,
@@ -289,13 +578,16 @@ const Profile = () => {
                 phone: profile.contact_number,
                 address: profile.address,
                 location: profile.address,
+                website: profile.website,
+                linkedin: profile.linkedin,
+                github: profile.github,
                 summary: profile.summary,
-                skills: joinedSkills,
+                skills: skillEntries.map(s => s.trim()).filter(Boolean),
                 experience: expJson,
                 education: educStructured ? JSON.stringify(educEntries) : profile.education,
-                projects: profile.projects,
-                certifications: profile.certifications,
-                awards: profile.awards
+                projects: projJson,
+                certifications: certsJson,
+                awards: awardsJson
             }, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
@@ -436,24 +728,39 @@ const Profile = () => {
         if (section.id === 'skills') {
             return skillEntries.some(s => s.trim().length > 0);
         }
+        if (section.id === 'projects') {
+            return projectEntries.some(p => (p.name || '').trim().length > 0 || (p.summary || '').trim().length > 0);
+        }
+        if (section.id === 'awards') {
+            return awardEntries.some(a => (a || '').trim().length > 0);
+        }
+        if (section.id === 'certs') {
+            return certEntries.some(c => (c || '').trim().length > 0);
+        }
         const complete = (profile[section.field]?.trim() || '').length > 0;
         return complete;
     };
 
-    const handleFinishSection = (id) => {
-        const idx = sections.findIndex(s => s.id === id);
-        for (let i = idx + 1; i < sections.length; i++) {
-            if (!isSectionComplete(sections[i])) {
-                setExpandedSection(sections[i].id);
-                return;
+    const handleFinishSection = async (id) => {
+        const saved = await handleSave();
+        if (saved) {
+            const idx = sections.findIndex(s => s.id === id);
+            for (let i = idx + 1; i < sections.length; i++) {
+                if (!isSectionComplete(sections[i])) {
+                    setExpandedSection(sections[i].id);
+                    return;
+                }
             }
+            for (let i = 0; i < idx; i++) {
+                if (!isSectionComplete(sections[i])) {
+                    setExpandedSection(sections[i].id);
+                    return;
+                }
+            }
+            setExpandedSection(null);
         }
-        setExpandedSection(null);
     };
 
-    const [showResumeModal, setShowResumeModal] = useState(false);
-    const [parsedData, setParsedData] = useState(null);
-    const [isParsing, setIsParsing] = useState(false);
     const [generatingResume, setGeneratingResume] = useState(false);
     const [resumePdf, setResumePdf] = useState(null);
     const [showResumePreview, setShowResumePreview] = useState(false);
@@ -462,74 +769,10 @@ const Profile = () => {
     const [showScanModal, setShowScanModal] = useState(false);
     const [pwdIdNumber, setPwdIdNumber] = useState('');
 
-    const handleResumeUpload = async (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
-
-        // Reset file input so re-uploading the same file triggers change
-        e.target.value = '';
-
-        setIsParsing(true);
-        const formData = new FormData();
-        formData.append('file', file);
-
-        try {
-            const res = await axios.post(`${API_BASE_URL}/resume/parse`, formData, {
-                headers: {
-                    'Content-Type': 'multipart/form-data',
-                    'Authorization': `Bearer ${token}`
-                }
-            });
-
-            if (res.data && res.data.success && res.data.data) {
-                const extracted = res.data.data;
-                setParsedData({
-                    name: extracted.name || '',
-                    email: extracted.email || '',
-                    contact_number: extracted.mobile_number || extracted.contact_number || '',
-                    address: extracted.address || '',
-                    education: extracted.education || '',
-                    experience: extracted.experience || '',
-                    skills: extracted.skills || '',
-                    summary: extracted.summary || ''
-                });
-                setShowResumeModal(true);
-                toast.success('Resume parsed successfully with pydparser!');
-            } else {
-                toast.error('Could not extract data from the uploaded resume.');
-            }
-        } catch (err) {
-            console.error('Resume parsing failed', err);
-            const msg = err.response?.data?.detail || err.message || 'Failed to parse resume.';
-            toast.error(msg);
-        } finally {
-            setIsParsing(false);
-        }
-    };
-
-    const applyParsedData = () => {
-        setProfile(prev => ({
-            ...prev,
-            ...parsedData,
-            name: parsedData.name || prev.name,
-            email: parsedData.email || prev.email,
-            contact_number: parsedData.contact_number || prev.contact_number,
-            address: parsedData.address || prev.address
-        }));
-        setShowResumeModal(false);
-    };
-
     return (
         <div className="min-h-screen bg-[#F8FAFC] pb-20">
-            {/* Resume Upload Modal */}
+            {/* Modal Previews */}
             <AnimatePresence>
-                {showResumeModal && (
-                    <ResumeParseModal 
-                        data={parsedData} 
-                        onClose={() => setShowResumeModal(false)} 
-                        onConfirm={applyParsedData}
-                    />
-                )}
                 {showResumePreview && resumePdf && (
                     <ResumePreviewModal 
                         base64={resumePdf}
@@ -562,38 +805,7 @@ const Profile = () => {
                                     </div>
                                     <h2 className="text-xl font-black text-slate-800 leading-tight">{user?.name}</h2>
                                     <p className="text-slate-400 text-[11px] font-bold uppercase tracking-widest mt-2">{user?.role}</p>
-                                    
-                                    <div className="mt-6 w-full">
-                                        <input 
-                                            type="file" 
-                                            id="resume-upload" 
-                                            className="hidden" 
-                                            accept=".pdf,.doc,.docx,.txt"
-                                            onChange={handleResumeUpload}
-                                        />
-                                        <label 
-                                            htmlFor="resume-upload"
-                                            className={`w-full flex items-center justify-center gap-2 py-3 rounded-2xl border-2 border-dashed border-slate-200 text-slate-400 text-[10px] font-black uppercase tracking-widest cursor-pointer hover:border-blue-400 hover:text-blue-600 transition-all ${isParsing ? 'animate-pulse' : ''}`}
-                                        >
-                                            {isParsing ? 'AI Parsing...' : <><Plus size={14}/> Import Resume</>}
-                                        </label>
-                                    </div>
-
                                     <div className="mt-6 w-full border-t border-slate-100 pt-6">
-                                        <div className="flex items-center justify-between mb-4">
-                                            <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 flex items-center gap-2">
-                                                <FileText size={12}/> ATS Resume
-                                            </span>
-                                            <label className="relative inline-flex items-center cursor-pointer">
-                                                <input 
-                                                    type="checkbox" 
-                                                    checked={profile.auto_generate_resume}
-                                                    onChange={(e) => setProfile(prev => ({ ...prev, auto_generate_resume: e.target.checked }))}
-                                                    className="sr-only peer"
-                                                />
-                                                <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
-                                            </label>
-                                        </div>
                                         <button
                                             onClick={handleGenerateResume}
                                             disabled={generatingResume}
@@ -648,20 +860,6 @@ const Profile = () => {
                                     ))}
                                 </div>
                             </div>
-
-                            <button 
-                                onClick={handleSave}
-                                disabled={saving}
-                                className={`w-full flex items-center justify-center gap-3 py-5 rounded-[2rem] font-black text-xs uppercase tracking-[0.2em] transition-all shadow-xl ${saving ? 'bg-slate-100 text-slate-400' : 'bg-blue-600 text-white hover:bg-blue-700 shadow-blue-100 hover:-translate-y-1'}`}
-                            >
-                                {saving ? 'Syncing...' : <><Save size={18}/> Update Profile</>}
-                            </button>
-                            
-                            {saveStatus === 'success' && (
-                                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="flex items-center justify-center gap-2 text-emerald-600 font-bold text-xs bg-emerald-50 py-3 rounded-2xl border border-emerald-100">
-                                    <CheckCircle2 size={16} /> Changes Synchronized
-                                </motion.div>
-                            )}
                         </div>
                     </div>
 
@@ -688,6 +886,7 @@ const Profile = () => {
                                     isOpen={expandedSection === section.id}
                                     onToggle={() => setExpandedSection(expandedSection === section.id ? null : section.id)}
                                     onFinish={handleFinishSection}
+                                    isSaving={saving}
                                     profile={profile}
                                     setProfile={setProfile}
                                     toggleDisability={toggleDisability}
@@ -702,6 +901,12 @@ const Profile = () => {
                                     setExpEntries={setExpEntries}
                                     skillEntries={skillEntries}
                                     setSkillEntries={setSkillEntries}
+                                    projectEntries={projectEntries}
+                                    setProjectEntries={setProjectEntries}
+                                    awardEntries={awardEntries}
+                                    setAwardEntries={setAwardEntries}
+                                    certEntries={certEntries}
+                                    setCertEntries={setCertEntries}
                                     API_BASE_URL={API_BASE_URL}
                                 />
                             ))}
@@ -727,14 +932,32 @@ const SuggestionChips = ({ onSelect, suggestions }) => (
     </div>
 );
 
-const ExpansionPanel = ({ section, isOpen, onToggle, onFinish, profile, setProfile, toggleDisability, updateDisabilityEntry, disabilityProfile, setDisabilityProfile, educEntries, setEducEntries, educStructured, setEducStructured, expEntries, setExpEntries, skillEntries, setSkillEntries, API_BASE_URL }) => {
+const ExpansionPanel = ({ 
+    section, isOpen, onToggle, onFinish, isSaving, 
+    profile, setProfile, 
+    toggleDisability, updateDisabilityEntry, 
+    disabilityProfile, setDisabilityProfile, 
+    educEntries, setEducEntries, educStructured, setEducStructured, 
+    expEntries = [], setExpEntries, 
+    skillEntries = [], setSkillEntries,
+    projectEntries = [], setProjectEntries,
+    awardEntries = [], setAwardEntries,
+    certEntries = [], setCertEntries,
+    API_BASE_URL 
+}) => {
     const isComplete = section.id === 'experience'
-        ? expEntries.some(e => (e.company || '').trim().length > 0 || (e.position || '').trim().length > 0 || (e.year || '').trim().length > 0)
+        ? (expEntries || []).some(e => (e.company || '').trim().length > 0 || (e.position || '').trim().length > 0 || (e.year || '').trim().length > 0)
         : section.id === 'skills'
-            ? skillEntries.some(s => s.trim().length > 0)
-            : Array.isArray(profile[section.field]) 
-                ? (profile[section.field] || []).length > 0 
-                : (profile[section.field]?.trim() || '').length > 0;
+            ? (skillEntries || []).some(s => s.trim().length > 0)
+            : section.id === 'projects'
+                ? (projectEntries || []).some(p => (p.name || '').trim().length > 0 || (p.summary || '').trim().length > 0)
+                : section.id === 'awards'
+                    ? (awardEntries || []).some(a => (a || '').trim().length > 0)
+                    : section.id === 'certs'
+                        ? (certEntries || []).some(c => (c || '').trim().length > 0)
+                        : Array.isArray(profile[section.field]) 
+                            ? (profile[section.field] || []).length > 0 
+                            : (profile[section.field]?.trim() || '').length > 0;
 
     const appendSuggestion = (field, value) => {
         setProfile(prev => {
@@ -760,7 +983,7 @@ const ExpansionPanel = ({ section, isOpen, onToggle, onFinish, profile, setProfi
                             <p className="text-slate-400 text-xs font-medium mt-1 truncate max-w-[400px]">
                                 {section.id === 'experience'
                                     ? (() => {
-                                        const valid = expEntries.filter(e => (e.company || '').trim() || (e.position || '').trim() || (e.year || '').trim());
+                                        const valid = (expEntries || []).filter(e => (e.company || '').trim() || (e.position || '').trim() || (e.year || '').trim());
                                         if (valid.length === 0) return 'No work experience added yet.';
                                         const first = valid[0];
                                         const parts = [first.position, first.company ? `at ${first.company}` : '', first.year ? `(${first.year})` : ''].filter(Boolean);
@@ -768,14 +991,30 @@ const ExpansionPanel = ({ section, isOpen, onToggle, onFinish, profile, setProfi
                                     })()
                                     : section.id === 'skills'
                                         ? (() => {
-                                            const valid = skillEntries.map(s => s.trim()).filter(Boolean);
+                                            const valid = (skillEntries || []).map(s => s.trim()).filter(Boolean);
                                             return valid.length > 0 ? valid.join(', ') : 'No technical skills added yet.';
                                         })()
-                                        : profile[section.field] 
-                                            ? (Array.isArray(profile[section.field]) 
-                                                ? profile[section.field].join(', ') 
-                                                : profile[section.field]).substring(0, 80) + (profile[section.field].length > 80 ? '...' : '') 
-                                            : `No ${section.label.toLowerCase()} added yet.`}
+                                    : section.id === 'projects'
+                                        ? (() => {
+                                            const valid = (projectEntries || []).filter(p => (p.name || '').trim());
+                                            if (valid.length === 0) return 'No notable projects added yet.';
+                                            return `${valid.length} project${valid.length > 1 ? 's' : ''}: ${valid.map(p => p.name).join(', ')}`;
+                                        })()
+                                    : section.id === 'awards'
+                                        ? (() => {
+                                            const valid = (awardEntries || []).map(a => a.trim()).filter(Boolean);
+                                            return valid.length > 0 ? valid.join(', ') : 'No awards or honors added yet.';
+                                        })()
+                                    : section.id === 'certs'
+                                        ? (() => {
+                                            const valid = (certEntries || []).map(c => c.trim()).filter(Boolean);
+                                            return valid.length > 0 ? valid.join(', ') : 'No certifications added yet.';
+                                        })()
+                                    : profile[section.field] 
+                                        ? (Array.isArray(profile[section.field]) 
+                                            ? profile[section.field].join(', ') 
+                                            : String(profile[section.field])).substring(0, 80) + (String(profile[section.field]).length > 80 ? '...' : '') 
+                                        : `No ${section.label.toLowerCase()} added yet.`}
                             </p>
                         )}
                     </div>
@@ -857,6 +1096,48 @@ const ExpansionPanel = ({ section, isOpen, onToggle, onFinish, profile, setProfi
                                                     onChange={(e) => setProfile(prev => ({ ...prev, address: e.target.value }))}
                                                     className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-3.5 text-slate-700 placeholder:text-slate-300 focus:border-blue-500 focus:bg-white focus:outline-none transition-all text-sm font-medium shadow-inner"
                                                     placeholder="e.g. Quezon City, Metro Manila"
+                                                />
+                                            </div>
+
+                                            {/* Website / Portfolio */}
+                                            <div className="space-y-2">
+                                                <label className="text-xs font-bold text-slate-600 flex items-center gap-1.5">
+                                                    <Globe size={14} className="text-blue-600" /> Website / Portfolio
+                                                </label>
+                                                <input 
+                                                    type="url"
+                                                    value={profile.website || ''}
+                                                    onChange={(e) => setProfile(prev => ({ ...prev, website: e.target.value }))}
+                                                    className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-3.5 text-slate-700 placeholder:text-slate-300 focus:border-blue-500 focus:bg-white focus:outline-none transition-all text-sm font-medium shadow-inner"
+                                                    placeholder="e.g. https://myportfolio.com or rendercv.com"
+                                                />
+                                            </div>
+
+                                            {/* LinkedIn */}
+                                            <div className="space-y-2">
+                                                <label className="text-xs font-bold text-slate-600 flex items-center gap-1.5">
+                                                    <Link2 size={14} className="text-blue-600" /> LinkedIn (Profile URL or Username)
+                                                </label>
+                                                <input 
+                                                    type="text"
+                                                    value={profile.linkedin || ''}
+                                                    onChange={(e) => setProfile(prev => ({ ...prev, linkedin: e.target.value }))}
+                                                    className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-3.5 text-slate-700 placeholder:text-slate-300 focus:border-blue-500 focus:bg-white focus:outline-none transition-all text-sm font-medium shadow-inner"
+                                                    placeholder="e.g. rendercv or https://linkedin.com/in/rendercv"
+                                                />
+                                            </div>
+
+                                            {/* GitHub */}
+                                            <div className="space-y-2 md:col-span-2">
+                                                <label className="text-xs font-bold text-slate-600 flex items-center gap-1.5">
+                                                    <Code size={14} className="text-blue-600" /> GitHub (Profile URL or Username)
+                                                </label>
+                                                <input 
+                                                    type="text"
+                                                    value={profile.github || ''}
+                                                    onChange={(e) => setProfile(prev => ({ ...prev, github: e.target.value }))}
+                                                    className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-3.5 text-slate-700 placeholder:text-slate-300 focus:border-blue-500 focus:bg-white focus:outline-none transition-all text-sm font-medium shadow-inner"
+                                                    placeholder="e.g. rendercv or https://github.com/rendercv"
                                                 />
                                             </div>
                                         </div>
@@ -1010,8 +1291,8 @@ const ExpansionPanel = ({ section, isOpen, onToggle, onFinish, profile, setProfi
                                                     )}
                                                 </div>
 
-                                                {/* 3 Divided Parts: Company, Position, Year */}
-                                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                                {/* 4 Divided Parts: Company, Position, Location, Year */}
+                                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                                                     <div className="space-y-1.5">
                                                         <label className="text-[10px] font-black uppercase tracking-wider text-slate-400 pl-1 flex items-center gap-1.5">
                                                             <Building2 size={13} className="text-[#0038A8]" />
@@ -1029,7 +1310,7 @@ const ExpansionPanel = ({ section, isOpen, onToggle, onFinish, profile, setProfi
                                                                     return next;
                                                                 });
                                                             }}
-                                                            placeholder="e.g. Acme Corp"
+                                                            placeholder="e.g. Nexus AI"
                                                             className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold text-slate-700 placeholder:text-slate-300 focus:border-blue-500 focus:outline-none transition-all shadow-sm"
                                                         />
                                                     </div>
@@ -1051,32 +1332,201 @@ const ExpansionPanel = ({ section, isOpen, onToggle, onFinish, profile, setProfi
                                                                     return next;
                                                                 });
                                                             }}
-                                                            placeholder="e.g. Customer Support Specialist"
+                                                            placeholder="e.g. Co-Founder & CTO"
                                                             className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold text-slate-700 placeholder:text-slate-300 focus:border-blue-500 focus:outline-none transition-all shadow-sm"
                                                         />
                                                     </div>
 
                                                     <div className="space-y-1.5">
                                                         <label className="text-[10px] font-black uppercase tracking-wider text-slate-400 pl-1 flex items-center gap-1.5">
-                                                            <Calendar size={13} className="text-[#0038A8]" />
-                                                            Year / Duration
+                                                            <MapPin size={13} className="text-[#0038A8]" />
+                                                            Location
                                                         </label>
                                                         <input 
                                                             type="text"
-                                                            value={expItem.year || ''}
+                                                            value={expItem.location || ''}
                                                             onChange={(e) => {
                                                                 const val = e.target.value;
                                                                 setExpEntries(prev => {
                                                                     const next = [...prev];
-                                                                    next[index] = { ...next[index], year: val };
+                                                                    next[index] = { ...next[index], location: val };
                                                                     setProfile(p => ({ ...p, experience: serializeExperience(next) }));
                                                                     return next;
                                                                 });
                                                             }}
-                                                            placeholder="e.g. 2021 - 2023 or 2024"
+                                                            placeholder="e.g. San Francisco, CA"
                                                             className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold text-slate-700 placeholder:text-slate-300 focus:border-blue-500 focus:outline-none transition-all shadow-sm"
                                                         />
                                                     </div>
+
+                                                    <div className="space-y-1.5">
+                                                        <div className="flex items-center justify-between">
+                                                            <label className="text-[10px] font-black uppercase tracking-wider text-slate-400 pl-1 flex items-center gap-1.5">
+                                                                <Calendar size={13} className="text-[#0038A8]" />
+                                                                Timeline / Duration
+                                                            </label>
+                                                            <label className="flex items-center gap-1.5 text-[10px] font-bold text-slate-500 cursor-pointer select-none">
+                                                                <input 
+                                                                    type="checkbox"
+                                                                    checked={!!expItem.is_present}
+                                                                    onChange={(e) => {
+                                                                        const checked = e.target.checked;
+                                                                        setExpEntries(prev => {
+                                                                            const next = [...prev];
+                                                                            const updated = {
+                                                                                ...next[index],
+                                                                                is_present: checked,
+                                                                                end_date: checked ? '' : next[index].end_date,
+                                                                                year: buildDateRange(next[index].start_date, checked ? '' : next[index].end_date, checked)
+                                                                            };
+                                                                            next[index] = updated;
+                                                                            setProfile(p => ({ ...p, experience: serializeExperience(next) }));
+                                                                            return next;
+                                                                        });
+                                                                    }}
+                                                                    className="accent-blue-600 rounded"
+                                                                />
+                                                                <span>Present</span>
+                                                            </label>
+                                                        </div>
+                                                        <div className="grid grid-cols-2 gap-2">
+                                                            <div>
+                                                                <input 
+                                                                    type="month"
+                                                                    value={toMonthValue(expItem.start_date)}
+                                                                    onChange={(e) => {
+                                                                        const val = e.target.value;
+                                                                        setExpEntries(prev => {
+                                                                            const next = [...prev];
+                                                                            const updated = {
+                                                                                ...next[index],
+                                                                                start_date: val,
+                                                                                year: buildDateRange(val, next[index].end_date, next[index].is_present)
+                                                                            };
+                                                                            next[index] = updated;
+                                                                            setProfile(p => ({ ...p, experience: serializeExperience(next) }));
+                                                                            return next;
+                                                                        });
+                                                                    }}
+                                                                    title="Start Month and Year"
+                                                                    className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-xs font-bold text-slate-700 focus:border-blue-500 focus:outline-none transition-all shadow-sm"
+                                                                />
+                                                                <span className="block text-[8px] font-bold text-slate-400 uppercase tracking-wider pl-1 mt-0.5">Start Month</span>
+                                                            </div>
+                                                            <div>
+                                                                <input 
+                                                                    type="month"
+                                                                    disabled={!!expItem.is_present}
+                                                                    value={expItem.is_present ? '' : toMonthValue(expItem.end_date)}
+                                                                    onChange={(e) => {
+                                                                        const val = e.target.value;
+                                                                        setExpEntries(prev => {
+                                                                            const next = [...prev];
+                                                                            const updated = {
+                                                                                ...next[index],
+                                                                                end_date: val,
+                                                                                year: buildDateRange(next[index].start_date, val, false)
+                                                                            };
+                                                                            next[index] = updated;
+                                                                            setProfile(p => ({ ...p, experience: serializeExperience(next) }));
+                                                                            return next;
+                                                                        });
+                                                                    }}
+                                                                    title="End Month and Year"
+                                                                    className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-xs font-bold text-slate-700 focus:border-blue-500 focus:outline-none transition-all shadow-sm disabled:bg-slate-50 disabled:text-slate-300 disabled:cursor-not-allowed"
+                                                                />
+                                                                <span className="block text-[8px] font-bold text-slate-400 uppercase tracking-wider pl-1 mt-0.5">End Month</span>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                {/* Highlights / Responsibilities - One text box per line */}
+                                                <div className="space-y-2 pt-1">
+                                                    <div className="flex items-center justify-between">
+                                                        <label className="text-[10px] font-black uppercase tracking-wider text-slate-400 pl-1 flex items-center gap-1.5">
+                                                            <Sparkles size={13} className="text-[#0038A8]" />
+                                                            Key Achievements / Responsibilities (One text box per line)
+                                                        </label>
+                                                        <span className="text-[9px] text-slate-400 font-bold uppercase tracking-wider">Each box is a bullet point</span>
+                                                    </div>
+                                                    <div className="space-y-2">
+                                                        {(Array.isArray(expItem.highlights) ? expItem.highlights : (expItem.highlights ? [expItem.highlights] : [''])).map((bullet, bIdx, bArr) => (
+                                                            <div key={bIdx} className="flex items-center gap-2">
+                                                                <div className="w-6 h-6 rounded-lg bg-blue-50 text-[#0038A8] flex items-center justify-center shrink-0 font-black text-xs select-none">
+                                                                    •
+                                                                </div>
+                                                                <input 
+                                                                    type="text"
+                                                                    value={bullet}
+                                                                    onChange={(e) => {
+                                                                        const val = e.target.value;
+                                                                        setExpEntries(prev => {
+                                                                            const next = [...prev];
+                                                                            const curHl = Array.isArray(next[index].highlights) ? [...next[index].highlights] : [''];
+                                                                            curHl[bIdx] = val;
+                                                                            next[index] = { ...next[index], highlights: curHl };
+                                                                            setProfile(p => ({ ...p, experience: serializeExperience(next) }));
+                                                                            return next;
+                                                                        });
+                                                                    }}
+                                                                    onKeyDown={(e) => {
+                                                                        if (e.key === 'Enter') {
+                                                                            e.preventDefault();
+                                                                            setExpEntries(prev => {
+                                                                                const next = [...prev];
+                                                                                const curHl = Array.isArray(next[index].highlights) ? [...next[index].highlights] : [''];
+                                                                                curHl.splice(bIdx + 1, 0, '');
+                                                                                next[index] = { ...next[index], highlights: curHl };
+                                                                                setProfile(p => ({ ...p, experience: serializeExperience(next) }));
+                                                                                return next;
+                                                                            });
+                                                                        }
+                                                                    }}
+                                                                    placeholder={
+                                                                        bIdx === 0 ? "e.g. Built foundation model infrastructure serving 2M+ monthly API requests with 99.97% uptime" :
+                                                                        bIdx === 1 ? "e.g. Raised $18M Series A led by Sequoia Capital, with participation from a16z and Founders Fund" :
+                                                                        "e.g. Scaled engineering team from 3 to 28 across ML research, platform, and applied AI divisions"
+                                                                    }
+                                                                    className="flex-1 bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-700 placeholder:text-slate-300 focus:border-blue-500 focus:outline-none transition-all shadow-sm"
+                                                                />
+                                                                {bArr.length > 1 && (
+                                                                    <button 
+                                                                        type="button"
+                                                                        onClick={() => {
+                                                                            setExpEntries(prev => {
+                                                                                const next = [...prev];
+                                                                                const curHl = Array.isArray(next[index].highlights) ? [...next[index].highlights] : [''];
+                                                                                const filtered = curHl.filter((_, i) => i !== bIdx);
+                                                                                next[index] = { ...next[index], highlights: filtered.length > 0 ? filtered : [''] };
+                                                                                setProfile(p => ({ ...p, experience: serializeExperience(next) }));
+                                                                                return next;
+                                                                            });
+                                                                        }}
+                                                                        className="text-slate-300 hover:text-rose-500 p-2 rounded-xl hover:bg-rose-50 transition-colors"
+                                                                        title="Remove this bullet"
+                                                                    >
+                                                                        <Trash2 size={15} />
+                                                                    </button>
+                                                                )}
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                    <button 
+                                                        type="button"
+                                                        onClick={() => {
+                                                            setExpEntries(prev => {
+                                                                const next = [...prev];
+                                                                const curHl = Array.isArray(next[index].highlights) ? [...next[index].highlights] : [''];
+                                                                next[index] = { ...next[index], highlights: [...curHl, ''] };
+                                                                setProfile(p => ({ ...p, experience: serializeExperience(next) }));
+                                                                return next;
+                                                            });
+                                                        }}
+                                                        className="mt-1 px-3.5 py-2 rounded-xl border border-dashed border-blue-200 bg-blue-50/40 text-[#0038A8] text-[10px] font-black uppercase tracking-wider hover:border-blue-400 hover:bg-blue-50 transition-all flex items-center gap-1.5"
+                                                    >
+                                                        <Plus size={13} /> Add Next Line / Bullet Point
+                                                    </button>
                                                 </div>
                                             </div>
                                         ))}
@@ -1085,7 +1535,7 @@ const ExpansionPanel = ({ section, isOpen, onToggle, onFinish, profile, setProfi
                                     <button 
                                         type="button"
                                         onClick={() => {
-                                            setExpEntries(prev => [...prev, { company: '', position: '', year: '' }]);
+                                            setExpEntries(prev => [...prev, { company: '', position: '', year: '', location: '', highlights: [''] }]);
                                         }}
                                         className="w-full py-4 rounded-2xl border-2 border-dashed border-blue-200 bg-blue-50/30 text-[#0038A8] text-xs font-black uppercase tracking-widest hover:border-blue-400 hover:bg-blue-50 transition-all flex items-center justify-center gap-2"
                                     >
@@ -1098,7 +1548,7 @@ const ExpansionPanel = ({ section, isOpen, onToggle, onFinish, profile, setProfi
                                 <div className="space-y-6">
                                     <div className="flex items-center justify-between">
                                         <label className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400">Technical Skills Details</label>
-                                        <span className="text-[9px] text-slate-300 font-bold">QUICK TAGS</span>
+                                        <span className="text-[9px] text-[#0038A8] font-bold uppercase tracking-wider bg-blue-50 px-2.5 py-1 rounded-lg">Each box is a line in your resume</span>
                                     </div>
                                     <SuggestionChips 
                                         suggestions={QUICK_SUGGESTIONS.skills || []} 
@@ -1126,8 +1576,8 @@ const ExpansionPanel = ({ section, isOpen, onToggle, onFinish, profile, setProfi
                                                 key={index} 
                                                 className="p-4 bg-slate-50 rounded-2xl border border-slate-200/80 flex items-center gap-3 transition-all focus-within:border-blue-500 focus-within:bg-white"
                                             >
-                                                <div className="w-8 h-8 rounded-xl bg-blue-50 text-[#0038A8] flex items-center justify-center shrink-0 font-bold text-xs">
-                                                    {index + 1}
+                                                <div className="w-8 h-8 rounded-xl bg-blue-50 text-[#0038A8] flex items-center justify-center shrink-0 font-bold text-xs select-none">
+                                                    •
                                                 </div>
                                                 <input 
                                                     type="text"
@@ -1141,6 +1591,18 @@ const ExpansionPanel = ({ section, isOpen, onToggle, onFinish, profile, setProfi
                                                             setProfile(p => ({ ...p, skills: joined }));
                                                             return next;
                                                         });
+                                                    }}
+                                                    onKeyDown={(e) => {
+                                                        if (e.key === 'Enter') {
+                                                            e.preventDefault();
+                                                            setSkillEntries(prev => {
+                                                                const next = [...prev];
+                                                                next.splice(index + 1, 0, '');
+                                                                const joined = next.map(s => s.trim()).filter(Boolean).join(', ');
+                                                                setProfile(p => ({ ...p, skills: joined }));
+                                                                return next;
+                                                            });
+                                                        }
                                                     }}
                                                     placeholder={`e.g. ${QUICK_SUGGESTIONS.skills[index % QUICK_SUGGESTIONS.skills.length] || 'Skill name'}`}
                                                     className="flex-1 bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-bold text-slate-700 placeholder:text-slate-300 focus:border-blue-500 focus:outline-none transition-all"
@@ -1174,36 +1636,490 @@ const ExpansionPanel = ({ section, isOpen, onToggle, onFinish, profile, setProfi
                                         }}
                                         className="w-full py-4 rounded-2xl border-2 border-dashed border-blue-200 bg-blue-50/30 text-[#0038A8] text-xs font-black uppercase tracking-widest hover:border-blue-400 hover:bg-blue-50 transition-all flex items-center justify-center gap-2"
                                     >
-                                        <Plus size={16} /> Add Another Skill
+                                        <Plus size={16} /> Add Next Line / Skill
                                     </button>
                                 </div>
                             )}
 
-                            {['projects', 'certs', 'awards'].includes(section.id) && (
-                                <div className="space-y-4">
+                            {section.id === 'projects' && (
+                                <div className="space-y-6">
                                     <div className="flex items-center justify-between">
-                                        <label className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400">{section.label} Details</label>
-                                        <span className="text-[9px] text-slate-300 font-bold">QUICK TAGS</span>
+                                        <label className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400">Projects & Contributions</label>
+                                        <span className="text-[9px] text-slate-300 font-bold">PORTFOLIO</span>
                                     </div>
                                     <SuggestionChips 
-                                        suggestions={QUICK_SUGGESTIONS[section.field === 'certifications' ? 'certifications' : (section.field || section.id)] || []} 
-                                        onSelect={(v) => appendSuggestion(section.field, v)} 
+                                        suggestions={QUICK_SUGGESTIONS.projects || []} 
+                                        onSelect={(v) => {
+                                            setProjectEntries(prev => {
+                                                const next = [...prev];
+                                                const lastIdx = next.length - 1;
+                                                const current = next[lastIdx] || { name: '', date: '', summary: '', highlights: [''] };
+                                                next[lastIdx] = {
+                                                    ...current,
+                                                    name: current.name ? `${current.name} - ${v}` : v
+                                                };
+                                                setProfile(p => ({ ...p, projects: serializeProjects(next) }));
+                                                return next;
+                                            });
+                                        }} 
                                     />
-                                    <textarea 
-                                        value={profile[section.field]}
-                                        onChange={(e) => setProfile(prev => ({ ...prev, [section.field]: e.target.value }))}
-                                        className="w-full bg-slate-50 border-2 border-slate-100 rounded-[2rem] p-8 text-slate-700 placeholder:text-slate-300 focus:border-blue-500 focus:bg-white focus:outline-none transition-all min-h-[300px] text-lg leading-relaxed shadow-inner"
-                                        placeholder={`Describe your ${section.label.toLowerCase()} in detail...`}
+
+                                    <div className="space-y-4">
+                                        {projectEntries.map((proj, pIdx) => (
+                                            <div 
+                                                key={pIdx} 
+                                                className="p-6 bg-slate-50 rounded-[2rem] border border-slate-200/80 space-y-4 relative group transition-all focus-within:border-blue-500 focus-within:bg-white"
+                                            >
+                                                <div className="flex items-center justify-between">
+                                                    <span className="text-[11px] font-black uppercase tracking-wider text-slate-600 flex items-center gap-2">
+                                                        <Briefcase size={14} className="text-[#0038A8]" />
+                                                        Project #{pIdx + 1}
+                                                    </span>
+                                                    {projectEntries.length > 1 && (
+                                                        <button 
+                                                            type="button"
+                                                            onClick={() => {
+                                                                setProjectEntries(prev => {
+                                                                    const next = prev.filter((_, i) => i !== pIdx);
+                                                                    const resolved = next.length > 0 ? next : [{ name: '', date: '', summary: '', highlights: [''] }];
+                                                                    setProfile(p => ({ ...p, projects: serializeProjects(resolved) }));
+                                                                    return resolved;
+                                                                });
+                                                            }}
+                                                            className="text-rose-400 hover:text-rose-600 transition-colors flex items-center gap-1.5 text-xs font-bold px-2.5 py-1 rounded-xl hover:bg-rose-50"
+                                                        >
+                                                            <Trash2 size={14} />
+                                                            <span>Remove</span>
+                                                        </button>
+                                                    )}
+                                                </div>
+
+                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                    <div className="space-y-1.5">
+                                                        <label className="text-[10px] font-black uppercase tracking-wider text-slate-400 pl-1">Project Name / Title</label>
+                                                        <input 
+                                                            type="text"
+                                                            value={proj.name || ''}
+                                                            onChange={(e) => {
+                                                                const val = e.target.value;
+                                                                setProjectEntries(prev => {
+                                                                    const next = [...prev];
+                                                                    next[pIdx] = { ...next[pIdx], name: val };
+                                                                    setProfile(p => ({ ...p, projects: serializeProjects(next) }));
+                                                                    return next;
+                                                                });
+                                                            }}
+                                                            placeholder="e.g. FlashInfer"
+                                                            className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold text-slate-700 placeholder:text-slate-300 focus:border-blue-500 focus:outline-none transition-all shadow-sm"
+                                                        />
+                                                    </div>
+                                                    <div className="space-y-1.5">
+                                                        <div className="flex items-center justify-between">
+                                                            <label className="text-[10px] font-black uppercase tracking-wider text-slate-400 pl-1 flex items-center gap-1.5">
+                                                                <Calendar size={13} className="text-[#0038A8]" />
+                                                                Timeline / Duration
+                                                            </label>
+                                                            <label className="flex items-center gap-1.5 text-[10px] font-bold text-slate-500 cursor-pointer select-none">
+                                                                <input 
+                                                                    type="checkbox"
+                                                                    checked={!!proj.is_present}
+                                                                    onChange={(e) => {
+                                                                        const checked = e.target.checked;
+                                                                        setProjectEntries(prev => {
+                                                                            const next = [...prev];
+                                                                            const updated = {
+                                                                                ...next[pIdx],
+                                                                                is_present: checked,
+                                                                                end_date: checked ? '' : next[pIdx].end_date,
+                                                                                date: buildDateRange(next[pIdx].start_date, checked ? '' : next[pIdx].end_date, checked)
+                                                                            };
+                                                                            next[pIdx] = updated;
+                                                                            setProfile(p => ({ ...p, projects: serializeProjects(next) }));
+                                                                            return next;
+                                                                        });
+                                                                    }}
+                                                                    className="accent-blue-600 rounded"
+                                                                />
+                                                                <span>Present</span>
+                                                            </label>
+                                                        </div>
+                                                        <div className="grid grid-cols-2 gap-2">
+                                                            <div>
+                                                                <input 
+                                                                    type="month"
+                                                                    value={toMonthValue(proj.start_date)}
+                                                                    onChange={(e) => {
+                                                                        const val = e.target.value;
+                                                                        setProjectEntries(prev => {
+                                                                            const next = [...prev];
+                                                                            const updated = {
+                                                                                ...next[pIdx],
+                                                                                start_date: val,
+                                                                                date: buildDateRange(val, next[pIdx].end_date, next[pIdx].is_present)
+                                                                            };
+                                                                            next[pIdx] = updated;
+                                                                            setProfile(p => ({ ...p, projects: serializeProjects(next) }));
+                                                                            return next;
+                                                                        });
+                                                                    }}
+                                                                    title="Start Month and Year"
+                                                                    className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-xs font-bold text-slate-700 focus:border-blue-500 focus:outline-none transition-all shadow-sm"
+                                                                />
+                                                                <span className="block text-[8px] font-bold text-slate-400 uppercase tracking-wider pl-1 mt-0.5">Start Month</span>
+                                                            </div>
+                                                            <div>
+                                                                <input 
+                                                                    type="month"
+                                                                    disabled={!!proj.is_present}
+                                                                    value={proj.is_present ? '' : toMonthValue(proj.end_date)}
+                                                                    onChange={(e) => {
+                                                                        const val = e.target.value;
+                                                                        setProjectEntries(prev => {
+                                                                            const next = [...prev];
+                                                                            const updated = {
+                                                                                ...next[pIdx],
+                                                                                end_date: val,
+                                                                                date: buildDateRange(next[pIdx].start_date, val, false)
+                                                                            };
+                                                                            next[pIdx] = updated;
+                                                                            setProfile(p => ({ ...p, projects: serializeProjects(next) }));
+                                                                            return next;
+                                                                        });
+                                                                    }}
+                                                                    title="End Month and Year"
+                                                                    className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-xs font-bold text-slate-700 focus:border-blue-500 focus:outline-none transition-all shadow-sm disabled:bg-slate-50 disabled:text-slate-300 disabled:cursor-not-allowed"
+                                                                />
+                                                                <span className="block text-[8px] font-bold text-slate-400 uppercase tracking-wider pl-1 mt-0.5">End Month</span>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                <div className="space-y-1.5">
+                                                    <label className="text-[10px] font-black uppercase tracking-wider text-slate-400 pl-1">One-Line Overview / Description</label>
+                                                    <input 
+                                                        type="text"
+                                                        value={proj.summary || ''}
+                                                        onChange={(e) => {
+                                                            const val = e.target.value;
+                                                            setProjectEntries(prev => {
+                                                                const next = [...prev];
+                                                                next[pIdx] = { ...next[pIdx], summary: val };
+                                                                setProfile(p => ({ ...p, projects: serializeProjects(next) }));
+                                                                return next;
+                                                            });
+                                                        }}
+                                                        placeholder="e.g. Open-source library for high-performance LLM inference kernels"
+                                                        className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-xs font-bold text-slate-700 placeholder:text-slate-300 focus:border-blue-500 focus:outline-none transition-all shadow-sm"
+                                                    />
+                                                </div>
+
+                                                {/* Bullet points - individual text boxes per line */}
+                                                <div className="space-y-2 pt-1">
+                                                    <div className="flex items-center justify-between">
+                                                        <label className="text-[10px] font-black uppercase tracking-wider text-slate-400 pl-1 flex items-center gap-1.5">
+                                                            <Sparkles size={13} className="text-[#0038A8]" />
+                                                            Project Highlights & Metrics (One text box per line)
+                                                        </label>
+                                                        <span className="text-[9px] text-slate-400 font-bold uppercase tracking-wider">Each box is a bullet point</span>
+                                                    </div>
+                                                    <div className="space-y-2">
+                                                        {(Array.isArray(proj.highlights) ? proj.highlights : (proj.highlights ? [proj.highlights] : [''])).map((bullet, bIdx, bArr) => (
+                                                            <div key={bIdx} className="flex items-center gap-2">
+                                                                <div className="w-6 h-6 rounded-lg bg-blue-50 text-[#0038A8] flex items-center justify-center shrink-0 font-black text-xs select-none">
+                                                                    •
+                                                                </div>
+                                                                <input 
+                                                                    type="text"
+                                                                    value={bullet}
+                                                                    onChange={(e) => {
+                                                                        const val = e.target.value;
+                                                                        setProjectEntries(prev => {
+                                                                            const next = [...prev];
+                                                                            const curHl = Array.isArray(next[pIdx].highlights) ? [...next[pIdx].highlights] : [''];
+                                                                            curHl[bIdx] = val;
+                                                                            next[pIdx] = { ...next[pIdx], highlights: curHl };
+                                                                            setProfile(p => ({ ...p, projects: serializeProjects(next) }));
+                                                                            return next;
+                                                                        });
+                                                                    }}
+                                                                    onKeyDown={(e) => {
+                                                                        if (e.key === 'Enter') {
+                                                                            e.preventDefault();
+                                                                            setProjectEntries(prev => {
+                                                                                const next = [...prev];
+                                                                                const curHl = Array.isArray(next[pIdx].highlights) ? [...next[pIdx].highlights] : [''];
+                                                                                curHl.splice(bIdx + 1, 0, '');
+                                                                                next[pIdx] = { ...next[pIdx], highlights: curHl };
+                                                                                setProfile(p => ({ ...p, projects: serializeProjects(next) }));
+                                                                                return next;
+                                                                            });
+                                                                        }
+                                                                    }}
+                                                                    placeholder={
+                                                                        bIdx === 0 ? "e.g. Achieved 2.8x speedup over baseline attention implementations on A100 GPUs" :
+                                                                        "e.g. Adopted by 3 major AI labs, 8,500+ GitHub stars, 200+ contributors"
+                                                                    }
+                                                                    className="flex-1 bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-700 placeholder:text-slate-300 focus:border-blue-500 focus:outline-none transition-all shadow-sm"
+                                                                />
+                                                                {bArr.length > 1 && (
+                                                                    <button 
+                                                                        type="button"
+                                                                        onClick={() => {
+                                                                            setProjectEntries(prev => {
+                                                                                const next = [...prev];
+                                                                                const curHl = Array.isArray(next[pIdx].highlights) ? [...next[pIdx].highlights] : [''];
+                                                                                const filtered = curHl.filter((_, i) => i !== bIdx);
+                                                                                next[pIdx] = { ...next[pIdx], highlights: filtered.length > 0 ? filtered : [''] };
+                                                                                setProfile(p => ({ ...p, projects: serializeProjects(next) }));
+                                                                                return next;
+                                                                            });
+                                                                        }}
+                                                                        className="text-slate-300 hover:text-rose-500 p-2 rounded-xl hover:bg-rose-50 transition-colors"
+                                                                        title="Remove this bullet"
+                                                                    >
+                                                                        <Trash2 size={15} />
+                                                                    </button>
+                                                                )}
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                    <button 
+                                                        type="button"
+                                                        onClick={() => {
+                                                            setProjectEntries(prev => {
+                                                                const next = [...prev];
+                                                                const curHl = Array.isArray(next[pIdx].highlights) ? [...next[pIdx].highlights] : [''];
+                                                                next[pIdx] = { ...next[pIdx], highlights: [...curHl, ''] };
+                                                                setProfile(p => ({ ...p, projects: serializeProjects(next) }));
+                                                                return next;
+                                                            });
+                                                        }}
+                                                        className="mt-1 px-3.5 py-2 rounded-xl border border-dashed border-blue-200 bg-blue-50/40 text-[#0038A8] text-[10px] font-black uppercase tracking-wider hover:border-blue-400 hover:bg-blue-50 transition-all flex items-center gap-1.5"
+                                                    >
+                                                        <Plus size={13} /> Add Next Line / Bullet Point
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+
+                                    <button 
+                                        type="button"
+                                        onClick={() => {
+                                            setProjectEntries(prev => [...prev, { name: '', date: '', summary: '', highlights: [''] }]);
+                                        }}
+                                        className="w-full py-4 rounded-2xl border-2 border-dashed border-blue-200 bg-blue-50/30 text-[#0038A8] text-xs font-black uppercase tracking-widest hover:border-blue-400 hover:bg-blue-50 transition-all flex items-center justify-center gap-2"
+                                    >
+                                        <Plus size={16} /> Add Another Project
+                                    </button>
+                                </div>
+                            )}
+
+                            {section.id === 'certs' && (
+                                <div className="space-y-6">
+                                    <div className="flex items-center justify-between">
+                                        <label className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400">Certifications & Credentials</label>
+                                        <span className="text-[9px] text-[#0038A8] font-bold uppercase tracking-wider bg-blue-50 px-2.5 py-1 rounded-lg">Each box is a line in your resume</span>
+                                    </div>
+                                    <SuggestionChips 
+                                        suggestions={QUICK_SUGGESTIONS.certifications || []} 
+                                        onSelect={(v) => {
+                                            setCertEntries(prev => {
+                                                const lastIdx = prev.length - 1;
+                                                let next;
+                                                if (lastIdx >= 0 && prev[lastIdx].trim() === '') {
+                                                    next = [...prev];
+                                                    next[lastIdx] = v;
+                                                } else {
+                                                    next = [...prev, v];
+                                                }
+                                                setProfile(p => ({ ...p, certifications: serializeLineList(next) }));
+                                                return next;
+                                            });
+                                        }} 
                                     />
+                                    <div className="space-y-3">
+                                        {certEntries.map((cert, cIdx) => (
+                                            <div key={cIdx} className="p-4 bg-slate-50 rounded-2xl border border-slate-200/80 flex items-center gap-3 transition-all focus-within:border-blue-500 focus-within:bg-white">
+                                                <div className="w-8 h-8 rounded-xl bg-blue-50 text-[#0038A8] flex items-center justify-center shrink-0 font-bold text-xs select-none">
+                                                    •
+                                                </div>
+                                                <input 
+                                                    type="text"
+                                                    value={cert}
+                                                    onChange={(e) => {
+                                                        const val = e.target.value;
+                                                        setCertEntries(prev => {
+                                                            const next = [...prev];
+                                                            next[cIdx] = val;
+                                                            setProfile(p => ({ ...p, certifications: serializeLineList(next) }));
+                                                            return next;
+                                                        });
+                                                    }}
+                                                    onKeyDown={(e) => {
+                                                        if (e.key === 'Enter') {
+                                                            e.preventDefault();
+                                                            setCertEntries(prev => {
+                                                                const next = [...prev];
+                                                                next.splice(cIdx + 1, 0, '');
+                                                                setProfile(p => ({ ...p, certifications: serializeLineList(next) }));
+                                                                return next;
+                                                            });
+                                                        }
+                                                    }}
+                                                    placeholder={
+                                                        cIdx === 0 ? "e.g. AWS Certified Cloud Practitioner" :
+                                                        cIdx === 1 ? "e.g. Google Professional Data Engineer" :
+                                                        "e.g. First Aid & Basic Life Support Certified"
+                                                    }
+                                                    className="flex-1 bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-bold text-slate-700 placeholder:text-slate-300 focus:border-blue-500 focus:outline-none transition-all"
+                                                />
+                                                {certEntries.length > 1 && (
+                                                    <button 
+                                                        type="button"
+                                                        onClick={() => {
+                                                            setCertEntries(prev => {
+                                                                const next = prev.filter((_, i) => i !== cIdx);
+                                                                const resolved = next.length > 0 ? next : [''];
+                                                                setProfile(p => ({ ...p, certifications: serializeLineList(resolved) }));
+                                                                return resolved;
+                                                            });
+                                                        }}
+                                                        className="text-rose-400 hover:text-rose-600 transition-colors p-2 rounded-xl hover:bg-rose-50 shrink-0"
+                                                        title="Remove certification"
+                                                    >
+                                                        <Trash2 size={16} />
+                                                    </button>
+                                                )}
+                                            </div>
+                                        ))}
+                                    </div>
+                                    <button 
+                                        type="button"
+                                        onClick={() => {
+                                            setCertEntries(prev => {
+                                                const next = [...prev, ''];
+                                                setProfile(p => ({ ...p, certifications: serializeLineList(next) }));
+                                                return next;
+                                            });
+                                        }}
+                                        className="w-full py-4 rounded-2xl border-2 border-dashed border-blue-200 bg-blue-50/30 text-[#0038A8] text-xs font-black uppercase tracking-widest hover:border-blue-400 hover:bg-blue-50 transition-all flex items-center justify-center gap-2"
+                                    >
+                                        <Plus size={16} /> Add Next Line / Certification
+                                    </button>
+                                </div>
+                            )}
+
+                            {section.id === 'awards' && (
+                                <div className="space-y-6">
+                                    <div className="flex items-center justify-between">
+                                        <label className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400">Awards & Selected Honors</label>
+                                        <span className="text-[9px] text-[#0038A8] font-bold uppercase tracking-wider bg-blue-50 px-2.5 py-1 rounded-lg">Each box is a line in your resume</span>
+                                    </div>
+                                    <SuggestionChips 
+                                        suggestions={QUICK_SUGGESTIONS.awards || []} 
+                                        onSelect={(v) => {
+                                            setAwardEntries(prev => {
+                                                const lastIdx = prev.length - 1;
+                                                let next;
+                                                if (lastIdx >= 0 && prev[lastIdx].trim() === '') {
+                                                    next = [...prev];
+                                                    next[lastIdx] = v;
+                                                } else {
+                                                    next = [...prev, v];
+                                                }
+                                                setProfile(p => ({ ...p, awards: serializeLineList(next) }));
+                                                return next;
+                                            });
+                                        }} 
+                                    />
+                                    <div className="space-y-3">
+                                        {awardEntries.map((award, aIdx) => (
+                                            <div key={aIdx} className="p-4 bg-slate-50 rounded-2xl border border-slate-200/80 flex items-center gap-3 transition-all focus-within:border-blue-500 focus-within:bg-white">
+                                                <div className="w-8 h-8 rounded-xl bg-blue-50 text-[#0038A8] flex items-center justify-center shrink-0 font-bold text-xs select-none">
+                                                    •
+                                                </div>
+                                                <input 
+                                                    type="text"
+                                                    value={award}
+                                                    onChange={(e) => {
+                                                        const val = e.target.value;
+                                                        setAwardEntries(prev => {
+                                                            const next = [...prev];
+                                                            next[aIdx] = val;
+                                                            setProfile(p => ({ ...p, awards: serializeLineList(next) }));
+                                                            return next;
+                                                        });
+                                                    }}
+                                                    onKeyDown={(e) => {
+                                                        if (e.key === 'Enter') {
+                                                            e.preventDefault();
+                                                            setAwardEntries(prev => {
+                                                                const next = [...prev];
+                                                                next.splice(aIdx + 1, 0, '');
+                                                                setProfile(p => ({ ...p, awards: serializeLineList(next) }));
+                                                                return next;
+                                                            });
+                                                        }
+                                                    }}
+                                                    placeholder={
+                                                        aIdx === 0 ? "e.g. MIT Technology Review 35 Under 35 Innovators (2024)" :
+                                                        aIdx === 1 ? "e.g. Forbes 30 Under 30 in Enterprise Technology (2024)" :
+                                                        "e.g. ACM Doctoral Dissertation Award Honorable Mention (2023)"
+                                                    }
+                                                    className="flex-1 bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-bold text-slate-700 placeholder:text-slate-300 focus:border-blue-500 focus:outline-none transition-all"
+                                                />
+                                                {awardEntries.length > 1 && (
+                                                    <button 
+                                                        type="button"
+                                                        onClick={() => {
+                                                            setAwardEntries(prev => {
+                                                                const next = prev.filter((_, i) => i !== aIdx);
+                                                                const resolved = next.length > 0 ? next : [''];
+                                                                setProfile(p => ({ ...p, awards: serializeLineList(resolved) }));
+                                                                return resolved;
+                                                            });
+                                                        }}
+                                                        className="text-rose-400 hover:text-rose-600 transition-colors p-2 rounded-xl hover:bg-rose-50 shrink-0"
+                                                        title="Remove award"
+                                                    >
+                                                        <Trash2 size={16} />
+                                                    </button>
+                                                )}
+                                            </div>
+                                        ))}
+                                    </div>
+                                    <button 
+                                        type="button"
+                                        onClick={() => {
+                                            setAwardEntries(prev => {
+                                                const next = [...prev, ''];
+                                                setProfile(p => ({ ...p, awards: serializeLineList(next) }));
+                                                return next;
+                                            });
+                                        }}
+                                        className="w-full py-4 rounded-2xl border-2 border-dashed border-blue-200 bg-blue-50/30 text-[#0038A8] text-xs font-black uppercase tracking-widest hover:border-blue-400 hover:bg-blue-50 transition-all flex items-center justify-center gap-2"
+                                    >
+                                        <Plus size={16} /> Add Next Line / Award
+                                    </button>
                                 </div>
                             )}
                             
                             <div className="flex justify-end pt-4">
                                 <button 
                                     onClick={() => onFinish(section.id)}
-                                    className="px-8 py-3 bg-slate-900 text-white rounded-2xl text-[11px] font-black uppercase tracking-widest hover:bg-black transition-all"
+                                    disabled={isSaving}
+                                    className="px-8 py-3 bg-slate-900 text-white rounded-2xl text-[11px] font-black uppercase tracking-widest hover:bg-black transition-all flex items-center gap-2 shadow-sm disabled:opacity-50"
                                 >
-                                    Save & Continue
+                                    {isSaving ? (
+                                        <>
+                                            <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                            <span>Saving...</span>
+                                        </>
+                                    ) : (
+                                        'Save & Continue'
+                                    )}
                                 </button>
                             </div>
                         </div>
@@ -1512,16 +2428,6 @@ const DisabilityWizard = ({ profile, setProfile, disabilityProfile, setDisabilit
     );
 };
 
-const toMonthValue = (v) => {
-    if (!v) return '';
-    if (/^\d{4}$/.test(v)) return `${v}-01`;
-    if (/^\d{4}-\d{2}$/.test(v)) return v;
-    return '';
-};
-
-const isPresent = (v) => !v || !/^\d{4}(-\d{2})?$/.test(v);
-
-const currentMonth = () => new Date().toISOString().slice(0, 7);
 
 const EducationEditor = ({ entries, onChange, API_BASE_URL }) => {
     const updateEntry = (i, patch) => onChange(entries.map((e, xi) => xi === i ? { ...e, ...patch } : e));
@@ -1550,37 +2456,117 @@ const EducationEditor = ({ entries, onChange, API_BASE_URL }) => {
                         API_BASE_URL={API_BASE_URL}
                     />
                     {['College', 'Masteral/Doctoral'].includes(en.level) && (
-                        <div className="grid grid-cols-2 gap-3">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                             <input type="text" value={en.degree || ''} onChange={(e) => updateEntry(i, { degree: e.target.value })}
                                 className="bg-white border border-slate-100 rounded-xl px-3 py-2.5 text-xs font-bold text-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-100"
-                                placeholder="Degree (e.g. BS Computer Science)" />
+                                placeholder="Degree (e.g. PhD, BS, or Bachelor of Science)" />
                             <input type="text" value={en.area || ''} onChange={(e) => updateEntry(i, { area: e.target.value })}
                                 className="bg-white border border-slate-100 rounded-xl px-3 py-2.5 text-xs font-bold text-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-100"
-                                placeholder="Area of study (optional)" />
+                                placeholder="Area of study (e.g. Computer Science)" />
                         </div>
                     )}
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                         <div className="space-y-1.5">
-                            <label className="text-[9px] font-black uppercase tracking-widest text-slate-400 pl-1">Start</label>
+                            <label className="text-[9px] font-black uppercase tracking-widest text-slate-400 pl-1">Start Month</label>
                             <input type="month" value={toMonthValue(en.start_date)} onChange={(e) => updateEntry(i, { start_date: e.target.value })}
                                 className="w-full bg-white border border-slate-100 rounded-xl px-3 py-2.5 text-xs font-bold text-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-100" />
                         </div>
                         <div className="space-y-1.5">
-                            <label className="text-[9px] font-black uppercase tracking-widest text-slate-400 pl-1">End</label>
+                            <label className="text-[9px] font-black uppercase tracking-widest text-slate-400 pl-1">End Month</label>
                             <input type="month" value={isPresent(en.end_date) ? '' : toMonthValue(en.end_date)} disabled={isPresent(en.end_date)}
                                 onChange={(e) => updateEntry(i, { end_date: e.target.value })}
                                 className="w-full bg-white border border-slate-100 rounded-xl px-3 py-2.5 text-xs font-bold text-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-100 disabled:bg-slate-50 disabled:text-slate-300" />
                             <label className="flex items-center gap-1.5 pl-1 text-[10px] font-bold text-slate-400 cursor-pointer select-none">
                                 <input type="checkbox" className="accent-blue-600" checked={isPresent(en.end_date)}
                                     onChange={(e) => updateEntry(i, { end_date: e.target.checked ? '' : currentMonth() })} />
-                                Present / currently attending
+                                Present / attending
                             </label>
                         </div>
+                        <div className="space-y-1.5">
+                            <label className="text-[9px] font-black uppercase tracking-widest text-slate-400 pl-1">Location</label>
+                            <input type="text" value={en.location || ''} onChange={(e) => updateEntry(i, { location: e.target.value })}
+                                placeholder="e.g. Princeton, NJ or Manila"
+                                className="w-full bg-white border border-slate-100 rounded-xl px-3 py-2.5 text-xs font-bold text-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-100" />
+                        </div>
+                    </div>
+                    {/* Highlights / Honors / Thesis - One text box per line */}
+                    <div className="space-y-2 pt-1">
+                        <div className="flex items-center justify-between">
+                            <label className="text-[10px] font-black uppercase tracking-wider text-slate-400 pl-1 flex items-center gap-1.5">
+                                <Sparkles size={12} className="text-[#0038A8]" />
+                                Highlights / Honors / Thesis (One text box per line)
+                            </label>
+                            <span className="text-[9px] text-slate-400 font-bold uppercase tracking-wider">Each box is a bullet point</span>
+                        </div>
+                        <div className="space-y-2">
+                            {(() => {
+                                const hlList = Array.isArray(en.highlights)
+                                    ? (en.highlights.length > 0 ? en.highlights : [''])
+                                    : (typeof en.highlights === 'string' && en.highlights.trim()
+                                        ? en.highlights.split('\n').map(h => h.trim().replace(/^[-•*]\s*/, '')).filter(Boolean)
+                                        : ['']);
+                                return hlList.map((bullet, bIdx) => (
+                                    <div key={bIdx} className="flex items-center gap-2">
+                                        <div className="w-5 h-5 rounded-lg bg-blue-50 text-[#0038A8] flex items-center justify-center shrink-0 font-black text-xs select-none">
+                                            •
+                                        </div>
+                                        <input 
+                                            type="text"
+                                            value={bullet}
+                                            onChange={(e) => {
+                                                const updated = [...hlList];
+                                                updated[bIdx] = e.target.value;
+                                                updateEntry(i, { highlights: updated });
+                                            }}
+                                            onKeyDown={(e) => {
+                                                if (e.key === 'Enter') {
+                                                    e.preventDefault();
+                                                    const updated = [...hlList];
+                                                    updated.splice(bIdx + 1, 0, '');
+                                                    updateEntry(i, { highlights: updated });
+                                                }
+                                            }}
+                                            placeholder={
+                                                bIdx === 0 ? "e.g. Thesis: Efficient Neural Architecture Search for Resource-Constrained Deployment" :
+                                                bIdx === 1 ? "e.g. Advisor: Prof. Sanjeev Arora" :
+                                                "e.g. GPA: 3.97/4.00, Valedictorian"
+                                            }
+                                            className="flex-1 bg-white border border-slate-200 rounded-xl px-3.5 py-2 text-xs font-bold text-slate-700 placeholder:text-slate-300 focus:outline-none focus:border-blue-500 transition-all shadow-sm"
+                                        />
+                                        {hlList.length > 1 && (
+                                            <button 
+                                                type="button"
+                                                onClick={() => {
+                                                    const updated = hlList.filter((_, idx) => idx !== bIdx);
+                                                    updateEntry(i, { highlights: updated.length > 0 ? updated : [''] });
+                                                }}
+                                                className="text-slate-300 hover:text-rose-500 p-1.5 rounded-lg hover:bg-rose-50 transition-colors"
+                                                title="Remove this line"
+                                            >
+                                                <Trash2 size={14} />
+                                            </button>
+                                        )}
+                                    </div>
+                                ));
+                            })()}
+                        </div>
+                        <button 
+                            type="button"
+                            onClick={() => {
+                                const hlList = Array.isArray(en.highlights)
+                                    ? en.highlights
+                                    : (typeof en.highlights === 'string' && en.highlights.trim() ? en.highlights.split('\n') : []);
+                                updateEntry(i, { highlights: [...hlList, ''] });
+                            }}
+                            className="mt-1 px-3 py-1.5 rounded-xl border border-dashed border-blue-200 bg-blue-50/40 text-[#0038A8] text-[9px] font-black uppercase tracking-wider hover:border-blue-400 hover:bg-blue-50 transition-all flex items-center gap-1.5"
+                        >
+                            <Plus size={12} /> Add Next Line / Highlight
+                        </button>
                     </div>
                 </div>
             ))}
             <button
-                onClick={() => onChange([...entries, { level: 'College', institution: '', degree: '', area: '', start_date: '', end_date: '' }])}
+                onClick={() => onChange([...entries, { level: 'College', institution: '', degree: '', area: '', start_date: '', end_date: '', location: '', highlights: [''] }])}
                 className="w-full py-4 rounded-2xl border-2 border-dashed border-slate-200 text-slate-400 text-[10px] font-black uppercase tracking-widest hover:border-blue-400 hover:text-blue-600 transition-all flex items-center justify-center gap-2"
             >
                 <Plus size={14} /> Add Education Entry
@@ -1665,130 +2651,34 @@ const WeightSlider = ({ label, value, onChange }) => (
 );
 
 
-const ResumeParseModal = ({ data, onClose, onConfirm }) => (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-slate-900/60 backdrop-blur-sm">
-        <motion.div 
-            initial={{ opacity: 0, scale: 0.95, y: 20 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.95, y: 20 }}
-            className="bg-white rounded-[3rem] shadow-2xl w-full max-w-4xl overflow-hidden flex flex-col max-h-[90vh]"
-        >
-            {/* Header */}
-            <div className="p-8 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
-                <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 bg-emerald-100 text-emerald-600 rounded-2xl flex items-center justify-center">
-                        <CheckCircle2 size={24} />
-                    </div>
-                    <div>
-                        <div className="flex items-center gap-3">
-                            <h2 className="text-2xl font-black text-slate-800">Resume Parsed Successfully</h2>
-                            <span className="px-3 py-1 bg-emerald-50 text-emerald-600 text-[10px] font-black uppercase tracking-widest rounded-full border border-emerald-100">85% Confidence</span>
-                        </div>
-                        <p className="text-slate-400 text-xs font-medium mt-1">Review the extracted information before saving to your profile.</p>
-                    </div>
-                </div>
-                <button onClick={onClose} className="w-10 h-10 rounded-xl hover:bg-slate-100 flex items-center justify-center text-slate-400 transition-colors">
-                    <Plus size={24} className="rotate-45" />
-                </button>
-            </div>
-
-            {/* Content */}
-            <div className="flex-1 overflow-y-auto p-8 space-y-8 custom-scrollbar">
-                {/* Summary */}
-                <div className="space-y-4">
-                    <label className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400 flex items-center gap-2">
-                        <User size={14} /> Professional Summary
-                    </label>
-                    <div className="p-6 bg-slate-50 rounded-2xl border border-slate-100 text-slate-600 text-sm leading-relaxed">
-                        {data?.summary || <span className="text-slate-400 italic">No summary generated.</span>}
-                    </div>
-                </div>
-
-                {/* Education */}
-                <div className="space-y-4">
-                    <label className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400 flex items-center gap-2">
-                        <GraduationCap size={14} /> Education
-                    </label>
-                    <div className="p-6 bg-slate-50 rounded-2xl border border-slate-100 text-slate-600 text-sm leading-relaxed">
-                        {data?.education || <span className="text-slate-400 italic">No education history detected.</span>}
-                    </div>
-                </div>
-
-                {/* Experience */}
-                <div className="space-y-4">
-                    <label className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400 flex items-center gap-2">
-                        <Building2 size={14} /> Work Experience
-                    </label>
-                    <div className="p-6 bg-slate-50 rounded-2xl border border-slate-100 text-slate-600 text-sm leading-relaxed whitespace-pre-line">
-                        {data?.experience || <span className="text-slate-400 italic">No prior experience listed.</span>}
-                    </div>
-                </div>
-
-                {/* Skills */}
-                <div className="space-y-4">
-                    <label className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400 flex items-center gap-2">
-                        <Terminal size={14} /> Extracted Skills
-                    </label>
-                    <div className="flex flex-wrap gap-2">
-                        {data?.skills && data.skills.trim() ? (
-                            data.skills.split(',').map(s => s.trim()).filter(Boolean).map(skill => (
-                                <span key={skill} className="px-4 py-2 bg-blue-50 text-blue-600 rounded-xl text-[10px] font-bold border border-blue-100">
-                                    {skill}
-                                </span>
-                            ))
-                        ) : (
-                            <span className="text-xs text-slate-400 italic">No technical skills detected in the document.</span>
-                        )}
-                    </div>
-                </div>
-            </div>
-
-            {/* Footer */}
-            <div className="p-8 border-t border-slate-100 flex items-center justify-end gap-4 bg-slate-50/50">
-                <button 
-                    onClick={onClose}
-                    className="px-8 py-4 rounded-2xl font-black text-xs uppercase tracking-widest text-slate-500 hover:bg-slate-100 transition-all"
-                >
-                    Discard
-                </button>
-                <button 
-                    onClick={onConfirm}
-                    className="px-12 py-4 bg-blue-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-blue-100 hover:bg-blue-700 transition-all"
-                >
-                    Save to Profile
-                </button>
-            </div>
-        </motion.div>
-    </div>
-);
-
 const ResumePreviewModal = ({ base64, onClose }) => (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-slate-900/60 backdrop-blur-sm">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-6 bg-slate-900/70 backdrop-blur-sm">
         <motion.div 
             initial={{ opacity: 0, scale: 0.95, y: 20 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 20 }}
-            className="bg-white rounded-[3rem] shadow-2xl w-full max-w-4xl overflow-hidden flex flex-col max-h-[90vh]"
+            className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-5xl overflow-hidden flex flex-col h-[92vh]"
         >
-            <div className="p-8 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+            <div className="px-6 py-5 sm:px-8 sm:py-6 border-b border-slate-100 flex items-center justify-between bg-white shrink-0">
                 <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 bg-blue-100 text-blue-600 rounded-2xl flex items-center justify-center">
+                    <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center">
                         <FileText size={24} />
                     </div>
                     <div>
-                        <h2 className="text-2xl font-black text-slate-800">ATS Resume Preview</h2>
-                        <p className="text-slate-400 text-xs font-medium mt-1">Your auto-generated ATS-friendly resume.</p>
+                        <h2 className="text-xl sm:text-2xl font-black text-slate-800">ATS Resume Preview</h2>
+                        <p className="text-slate-400 text-xs font-medium mt-0.5">Your auto-generated ATS-friendly resume.</p>
                     </div>
                 </div>
                 <button onClick={onClose} className="w-10 h-10 rounded-xl hover:bg-slate-100 flex items-center justify-center text-slate-400 transition-colors">
                     <Plus size={24} className="rotate-45" />
                 </button>
             </div>
-            <div className="flex-1 overflow-y-auto p-4 sm:p-6 bg-slate-900 flex flex-col">
+            <div className="flex-1 p-3 sm:p-5 bg-slate-900 overflow-hidden flex flex-col">
                 <PDFViewer 
                     pdfData={base64}
                     fileName="UPLIFT_ATS_Resume.pdf"
-                    className="w-full flex-1 min-h-[550px]"
+                    className="w-full flex-1 h-full min-h-0"
+                    initialScale={1.0}
                 />
             </div>
         </motion.div>
